@@ -1,0 +1,42 @@
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+
+# ダウンロードツール (yt-dlp) の一時ファイル・作業ディレクトリ
+downloads_*/
+*.mp4
+*.mkv
+*.webm
+*.part
+*.ytdl
+*.frag
+
+# ローカル出力用の一時ディレクトリなど
+/outputs/
+censored_transcript.txt
+
+# LLMプロンプト作業時の各種一時ファイル
+*.bak
+*.tmp
