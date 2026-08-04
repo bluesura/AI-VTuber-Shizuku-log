@@ -1,187 +1,424 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-SRT (SubRip) → SBV (SubViewer / YouTube) 変換スクリプト
+SRT → SBV 変換（YouTube ローリング字幕の重複を「完全一致」だけで整理）
 
-使い方:
-  python srt_to_sbv.py input.srt              # → input.sbv を生成
-  python srt_to_sbv.py input.srt output.sbv   # → 出力先を指定
+設計方針
+────────────────────────────────────────────────────────────────────────
+1. 類似度・部分一致・句読点補正は一切使わない。
+   隣接字幕の「行単位の完全一致」だけを持ち越しの根拠にする。
+2. 解析できないブロックを黙って読み飛ばさない。既定でエラー停止する。
+3. 判断できないものは削らない。既定では残して警告し、監査ログに記録する。
+   --strict を付けると、判断できない箇所があった時点で中止する。
+4. 中止した場合は書きかけの出力ファイルを残さない。
+5. 変換後に「入力に存在した全ての行が出力に残っているか」を自動検証する。
+
+使い方
+  python srt_to_sbv.py input.srt
+  python srt_to_sbv.py input.srt output.sbv.txt
+
+主なオプション
+  --strict            断定できない箇所があれば中止（出力を残さない）
+  --lenient           壊れたブロックをエラーにせず警告してスキップ
+  --preserve-times    元のタイムコードをそのまま使う（既定は中継分を前へ延長）
+  --no-merge-markers  [音楽] 等の連続マーカーを統合しない
+  --report FILE       監査ログの出力先（既定: 出力ファイル名 + .audit.txt）
+  --quiet             標準出力を最小限にする
+
+終了コード
+  0 = 正常  /  3 = 警告ありで完了  /  1 = エラー  /  2 = --strict による中止
+
+原理
+────────────────────────────────────────────────────────────────────────
+YouTube 自動字幕は画面に直前の行を残す「ローリング表示」のため、
+1 つの発話行が新規キュー・中継キュー・持ち越しの計 3 回出力される。
+
+  (1) 00:01:51,520 --> 00:01:54,510   ご主人様、…見に来て / くれて…先週
+  (2) 00:01:54,510 --> 00:01:54,520   くれて…先週                  <- 10ms 中継
+  (3) 00:01:54,520 --> 00:02:05,270   くれて…先週 / に引き続き…
+
+直前の表示状態の末尾と、現キューの先頭が行単位で完全一致する分だけを
+持ち越しとみなして除去する。一致しない行は必ず残す。
+
+互換性: Python 3.8 以上（f-string 内でバックスラッシュを使わない書き方に統一）
 """
 
+from __future__ import annotations
+
+import argparse
 import re
 import sys
 from pathlib import Path
 
+# ── 定数 ──────────────────────────────────────────────────────────────────────
 
-# ── タイムコード変換 ──────────────────────────────────────────────────────────
-# SRT : HH:MM:SS,mmm  →  SBV : H:MM:SS.mmm  (先頭ゼロ除去・カンマ→ピリオド)
+# 中継（settle）キューとみなす継続時間の上限。
+# YouTube の中継キューは厳密に 10ms、通常キューは実測で最短 228ms あり余裕が大きい。
+BRIDGE_MAX_MS = 20
 
-def srt_time_to_sbv(t: str) -> str:
-    """'01:02:03,456'  →  '1:02:03.456'"""
-    t = t.replace(",", ".")          # ミリ秒区切りをピリオドに
-    h, m, rest = t.split(":")
-    return f"{int(h)}:{m}:{rest}"    # 時間の先頭ゼロを除去
+# 連続する同一マーカーを統合してよい最大の間隔。
+MARKER_MERGE_MAX_GAP_MS = 20
 
-
-def parse_timecode_line(line: str) -> tuple[str, str]:
-    """
-    '00:00:01,000 --> 00:00:04,000 align:start position:0%'
-    → ('00:00:01,000', '00:00:04,000')  ※ SRT形式のまま返す
-    """
-    pattern = r"(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})"
-    m = re.match(pattern, line.strip())
-    if not m:
-        raise ValueError(f"タイムコード行を解析できません: {line!r}")
-    return m.group(1), m.group(2)
-
-
-def format_sbv_timecode(start_srt: str, end_srt: str) -> str:
-    """SRT形式の start/end → SBV形式の '0:00:01.000,0:00:04.000'"""
-    return f"{srt_time_to_sbv(start_srt)},{srt_time_to_sbv(end_srt)}"
-
-
-# ── インラインタグ除去 ────────────────────────────────────────────────────────
-# YouTube 自動生成字幕などに含まれるカラオケタイミングタグを除去する。
-#   例: <00:06:56,280>  <c>  </c>
-
-_INLINE_TAG_RE = re.compile(
-    r"<\d{2}:\d{2}:\d{2}[,\.]\d{3}>"   # タイムスタンプタグ  <HH:MM:SS,mmm>
-    r"|</?c>"                            # カラオケタグ        <c> / </c>
+# タイムコード行。末尾の align:start position:0% 等は許容する。
+TIMECODE_RE = re.compile(
+    r"^(\d{1,3}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*"
+    r"(\d{1,3}:\d{2}:\d{2}[,.]\d{1,3})\s*(?:\S.*)?$"
 )
 
-def strip_inline_tags(text: str) -> str:
-    """字幕テキストからインラインタイミングタグを取り除く。"""
-    return _INLINE_TAG_RE.sub("", text)
+# インラインタグ: <00:01:23,456> / <c> / </c> / <c.colorE5E5E5>
+INLINE_TAG_RE = re.compile(
+    r"<\d{1,3}:\d{2}:\d{2}[,.]\d{1,3}>"
+    r"|</?c(?:\.[^>]*)?>"
+)
+INLINE_TIME_RE = re.compile(r"<\d{1,3}:\d{2}:\d{2}[,.]\d{1,3}>")
+
+# [音楽] [拍手] [笑い] のような効果音マーカー
+MARKER_RE = re.compile(r"^\[[^\[\]\n]+\]$")
 
 
-# ── SRT パーサー ──────────────────────────────────────────────────────────────
+class ConversionError(Exception):
+    """変換を中止すべき異常。"""
 
-def parse_srt(text: str) -> list[dict]:
-    """SRT テキストを字幕ブロックのリストに変換する。"""
-    blocks = re.split(r"\n{2,}", text.strip())
-    subtitles = []
 
-    for block in blocks:
-        lines = block.strip().splitlines()
-        if len(lines) < 2:
+# ── タイムコード ─────────────────────────────────────────────────────────────
+
+def time_to_ms(t: str) -> int:
+    h, m, rest = t.split(":")
+    s, frac = rest.replace(".", ",").split(",")
+    return ((int(h) * 60 + int(m)) * 60 + int(s)) * 1000 + int(frac.ljust(3, "0"))
+
+
+def ms_to_sbv(value: int) -> str:
+    """ミリ秒 -> '1:02:03.456'（SBV 形式: 時の先頭ゼロなし・小数点区切り）"""
+    value = max(0, value)
+    h, rem = divmod(value, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, ms = divmod(rem, 1000)
+    return "{0}:{1:02d}:{2:02d}.{3:03d}".format(h, m, s, ms)
+
+
+# ── データ構造 ────────────────────────────────────────────────────────────────
+
+class Cue:
+    __slots__ = ("no", "start_ms", "end_ms", "lines", "raw")
+
+    def __init__(self, no, start_ms, end_ms, lines, raw):
+        self.no = no
+        self.start_ms = start_ms
+        self.end_ms = end_ms
+        self.lines = lines
+        self.raw = raw
+
+    @property
+    def duration_ms(self):
+        return self.end_ms - self.start_ms
+
+    @property
+    def has_inline_timing(self):
+        return bool(INLINE_TIME_RE.search(self.raw))
+
+
+class Block:
+    __slots__ = ("start_ms", "end_ms", "lines", "src_no")
+
+    def __init__(self, start_ms, end_ms, lines, src_no):
+        self.start_ms = start_ms
+        self.end_ms = end_ms
+        self.lines = lines
+        self.src_no = src_no
+
+    @property
+    def text(self):
+        return "\n".join(self.lines)
+
+
+# ── パース ────────────────────────────────────────────────────────────────────
+
+def normalize_lines(text):
+    """行頭行末の空白のみ除去し、空行を落とす。本文内部は一切変更しない。"""
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
+def parse_srt(text, lenient, warn):
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized:
+        raise ConversionError("SRT が空です。")
+
+    cues = []
+    for block_no, block in enumerate(re.split(r"\n{2,}", normalized), start=1):
+        lines = block.splitlines()
+
+        def bad(msg):
+            full = "ブロック{0}: {1}".format(block_no, msg)
+            if lenient:
+                warn(full + "  -> --lenient のためスキップ")
+                return None
+            detail = "\n".join("    " + ln for ln in lines[:4])
+            raise ConversionError(
+                full + "\n  該当:\n" + detail
+                + "\n  （--lenient を付けると警告してスキップします）"
+            )
+
+        if not [ln for ln in lines if ln.strip()]:
+            if bad("空のブロックです。") is None:
+                continue
+
+        pos = 1 if lines[0].strip().isdigit() else 0
+        if pos >= len(lines):
+            if bad("タイムコード行がありません。") is None:
+                continue
+
+        m = TIMECODE_RE.match(lines[pos].strip())
+        if not m:
+            if bad("タイムコードを解析できません: {0!r}".format(lines[pos])) is None:
+                continue
+
+        start_ms = time_to_ms(m.group(1))
+        end_ms = time_to_ms(m.group(2))
+        if end_ms < start_ms:
+            if bad("終了時刻が開始時刻より前です。") is None:
+                continue
+        if cues and start_ms < cues[-1].start_ms:
+            if bad("開始時刻が直前のブロックより前です（逆順）。") is None:
+                continue
+
+        raw_text = "\n".join(lines[pos + 1:])
+        cues.append(Cue(block_no, start_ms, end_ms,
+                        normalize_lines(INLINE_TAG_RE.sub("", raw_text)),
+                        raw_text))
+
+    if not cues:
+        raise ConversionError("有効な字幕ブロックが 1 つもありません。")
+    return cues
+
+
+# ── ローリング重複の除去 ──────────────────────────────────────────────────────
+
+def exact_rolling_overlap(previous, current):
+    """直前の表示状態の末尾と現キューの先頭が完全一致する最大行数。"""
+    for size in range(min(len(previous), len(current)), 0, -1):
+        if previous[-size:] == current[:size]:
+            return size
+    return 0
+
+
+def dedupe(cues, preserve_times, strict, warn):
+    out = []
+    display = []          # 直前キューの表示状態
+    stats = {"source": len(cues), "empty": 0, "new": 0,
+             "carryover": 0, "ambiguous_kept": 0}
+
+    for cue in cues:
+        cur = cue.lines
+
+        # 空キュー = 表示クリア。持ち越し判定の連続性をここで切る。
+        if not cur:
+            stats["empty"] += 1
+            display = []
             continue
 
-        tc_line_idx = 0
-        if re.match(r"^\d+$", lines[0].strip()):
-            tc_line_idx = 1
+        overlap = exact_rolling_overlap(display, cur)
+        new_lines = cur[overlap:]
 
-        if tc_line_idx >= len(lines):
-            continue
+        if new_lines:
+            out.append(Block(cue.start_ms, cue.end_ms, new_lines, cue.no))
+            stats["new"] += 1
+        else:
+            # 全行が直前状態からの完全な持ち越し。捨ててよい根拠を確認する。
+            is_bridge = (cue.duration_ms <= BRIDGE_MAX_MS
+                         and not cue.has_inline_timing)
+            is_marker = all(MARKER_RE.match(x) for x in cur)
 
-        timecode_raw = lines[tc_line_idx]
-        text_lines   = lines[tc_line_idx + 1:]
+            if is_bridge or is_marker:
+                stats["carryover"] += 1
+                # 直前に出力した行がこの持ち越し状態の末尾と一致する時だけ延長。
+                if (out and not preserve_times
+                        and cur[-len(out[-1].lines):] == out[-1].lines):
+                    out[-1].end_ms = max(out[-1].end_ms, cue.end_ms)
+            else:
+                msg = ("SRT ブロック {0} ({1} / {2}ms): 持ち越しか同一発話の"
+                       "繰り返しか断定できません: {3}").format(
+                    cue.no, ms_to_sbv(cue.start_ms), cue.duration_ms,
+                    " / ".join(cur))
+                if strict:
+                    raise ConversionError(msg)
+                warn(msg + "  -> 削除せず保持しました")
+                out.append(Block(cue.start_ms, cue.end_ms, cur, cue.no))
+                stats["ambiguous_kept"] += 1
 
-        if "-->" not in timecode_raw:
-            continue
+        display = cur
 
-        start_srt, end_srt = parse_timecode_line(timecode_raw)
-        cleaned_text = strip_inline_tags("\n".join(text_lines))
-
-        subtitles.append({
-            "start": start_srt,
-            "end":   end_srt,
-            "text":  cleaned_text,
-        })
-
-    return subtitles
-
-
-# ── クリーニング処理 ──────────────────────────────────────────────────────────
-
-def is_empty(sub: dict) -> bool:
-    """テキストが空白のみのブロックか判定する。"""
-    return sub["text"].strip() == ""
-
-
-def is_music_only(sub: dict) -> bool:
-    """テキストが [音楽] のみのブロックか判定する。"""
-    return sub["text"].strip() == "[音楽]"
+    if not out:
+        raise ConversionError("出力可能な字幕本文がありません。")
+    return out, stats
 
 
-def clean_subtitles(subtitles: list[dict]) -> list[dict]:
-    """
-    2つのクリーニング処理を適用する：
-    1. 空ブロック（テキストが空白のみ）を除去する
-    2. 連続する [音楽] ブロックを1つに統合する（開始〜末尾の終了タイムを使用）
-    """
-    # ステップ1：空ブロック除去
-    subtitles = [s for s in subtitles if not is_empty(s)]
-
-    # ステップ2：連続 [音楽] ブロックを統合
-    merged: list[dict] = []
+def merge_markers(blocks, note):
+    """同一の効果音マーカーが極小間隔で連続する場合だけ統合する。"""
+    merged = []
     i = 0
-    while i < len(subtitles):
-        if is_music_only(subtitles[i]):
-            # 連続する [音楽] ブロックをまとめて探す
+    count = 0
+    while i < len(blocks):
+        cur = blocks[i]
+        if len(cur.lines) == 1 and MARKER_RE.match(cur.lines[0]):
             j = i + 1
-            while j < len(subtitles) and is_music_only(subtitles[j]):
+            end = cur.end_ms
+            while (j < len(blocks) and blocks[j].lines == cur.lines
+                   and 0 <= blocks[j].start_ms - end <= MARKER_MERGE_MAX_GAP_MS):
+                end = blocks[j].end_ms
                 j += 1
-            # i〜j-1 を1ブロックに統合
-            merged.append({
-                "start": subtitles[i]["start"],
-                "end":   subtitles[j - 1]["end"],
-                "text":  "[音楽]",
-            })
             if j > i + 1:
-                print(f"  🎵 [音楽] ×{j - i} ブロックを統合: "
-                      f"{subtitles[i]['start']} → {subtitles[j-1]['end']}",
-                      file=sys.stderr)
+                count += j - i - 1
+                note("{0} x{1} を統合: {2} -> {3}".format(
+                    cur.lines[0], j - i, ms_to_sbv(cur.start_ms), ms_to_sbv(end)))
+                cur.end_ms = end
+            merged.append(cur)
             i = j
         else:
-            merged.append(subtitles[i])
+            merged.append(cur)
             i += 1
+    return merged, count
 
-    return merged
+
+# ── 検証 ──────────────────────────────────────────────────────────────────────
+
+def verify_coverage(cues, blocks):
+    """入力に存在した全ての行が出力にも存在するかを確認する。"""
+    src_lines = set()
+    for c in cues:
+        src_lines.update(c.lines)
+    out_lines = set()
+    for b in blocks:
+        out_lines.update(b.lines)
+    return sorted(src_lines - out_lines)
 
 
-# ── SBV 生成 ─────────────────────────────────────────────────────────────────
+def verify_timeline(blocks):
+    problems = []
+    for a, b in zip(blocks, blocks[1:]):
+        if b.start_ms < a.start_ms:
+            problems.append("出力時刻が逆順: {0} -> {1}".format(
+                ms_to_sbv(a.start_ms), ms_to_sbv(b.start_ms)))
+        elif b.start_ms < a.end_ms:
+            problems.append("出力時刻が重複: {0} と {1}".format(
+                ms_to_sbv(a.start_ms), ms_to_sbv(b.start_ms)))
+    return problems
 
-def build_sbv(subtitles: list[dict]) -> str:
-    """字幕リストから SBV テキストを組み立てる。"""
-    blocks = []
-    for sub in subtitles:
-        tc  = format_sbv_timecode(sub["start"], sub["end"])
-        txt = sub["text"]
-        blocks.append(f"{tc}\n{txt}")
-    return "\n\n".join(blocks) + "\n"
+
+# ── 出力 ──────────────────────────────────────────────────────────────────────
+
+def build_sbv(blocks):
+    parts = []
+    for b in blocks:
+        head = "{0},{1}".format(ms_to_sbv(b.start_ms), ms_to_sbv(b.end_ms))
+        parts.append(head + "\n" + b.text)
+    return "\n\n".join(parts) + "\n"
 
 
 # ── メイン ────────────────────────────────────────────────────────────────────
 
-def convert(src: Path, dst: Path) -> None:
-    raw = src.read_text(encoding="utf-8-sig")   # BOM 付き UTF-8 にも対応
-    subtitles = parse_srt(raw)
+def run(args, dst):
+    warnings = []
 
-    before = len(subtitles)
-    subtitles = clean_subtitles(subtitles)
-    after = len(subtitles)
+    def warn(msg):
+        warnings.append(msg)
 
-    if not subtitles:
-        print("⚠️  字幕ブロックが見つかりませんでした。", file=sys.stderr)
-        sys.exit(1)
+    def note(msg):
+        if not args.quiet:
+            print("  " + msg, file=sys.stderr)
 
-    sbv_text = build_sbv(subtitles)
-    dst.write_text(sbv_text, encoding="utf-8")
-    print(f"✅  変換完了: {src}  →  {dst}  "
-          f"({before} → {after} ブロック、{before - after} 件削減)")
+    report = Path(args.report) if args.report else Path(str(dst) + ".audit.txt")
+
+    raw = args.input.read_text(encoding="utf-8-sig")
+    cues = parse_srt(raw, args.lenient, warn)
+    blocks, stats = dedupe(cues, args.preserve_times, args.strict, warn)
+
+    merged = 0
+    if not args.no_merge_markers:
+        blocks, merged = merge_markers(blocks, note)
+
+    lost = verify_coverage(cues, blocks)
+    if lost:
+        raise ConversionError(
+            "内部検証エラー: 入力にあった {0} 行が出力から失われました。\n  例: {1}".format(
+                len(lost), lost[:5]))
+
+    for p in verify_timeline(blocks):
+        warn("タイムライン検証: " + p)
+
+    dst.write_text(build_sbv(blocks), encoding="utf-8")
+
+    if not args.quiet:
+        chars = sum(len(b.text) for b in blocks)
+        kinds = len(set(l for c in cues for l in c.lines))
+        print("[完了] {0} -> {1}".format(args.input.name, dst.name))
+        print("  元SRTブロック        : {0}".format(stats["source"]))
+        print("  空ブロック           : {0}".format(stats["empty"]))
+        print("  完全一致の持ち越し   : {0}".format(stats["carryover"]))
+        print("  マーカー統合         : {0}".format(merged))
+        print("  断定できず保持       : {0}".format(stats["ambiguous_kept"]))
+        print("  出力SBVブロック      : {0}  (本文 {1:,} 文字)".format(
+            len(blocks), chars))
+        print("  取りこぼし検証       : OK（入力の全 {0} 種の行が出力に存在）".format(kinds))
+
+    if warnings:
+        report.write_text("\n".join(warnings) + "\n", encoding="utf-8")
+        print("  [警告] {0} 件 -> {1}".format(len(warnings), report.name),
+              file=sys.stderr)
+        for w in warnings[:5]:
+            print("      " + w, file=sys.stderr)
+        if len(warnings) > 5:
+            print("      …他 {0} 件".format(len(warnings) - 5), file=sys.stderr)
+        return 3
+
+    if args.report:
+        report.write_text("警告なし：全ブロック検証済み\n", encoding="utf-8")
+    return 0
 
 
-def main() -> None:
-    if len(sys.argv) < 2:
-        print(__doc__)
-        sys.exit(0)
+def main():
+    p = argparse.ArgumentParser(
+        description="SRT → SBV 変換（ローリング字幕の重複を完全一致だけで整理）")
+    p.add_argument("input", type=Path)
+    p.add_argument("output", type=Path, nargs="?")
+    p.add_argument("--strict", action="store_true",
+                   help="断定できない箇所があれば中止する")
+    p.add_argument("--lenient", action="store_true",
+                   help="壊れたブロックをエラーにせず警告してスキップ")
+    p.add_argument("--preserve-times", action="store_true",
+                   help="元のタイムコードをそのまま使う")
+    p.add_argument("--no-merge-markers", action="store_true",
+                   help="[音楽] 等の連続マーカーを統合しない")
+    p.add_argument("--report", metavar="FILE", help="監査ログの出力先")
+    p.add_argument("--quiet", action="store_true")
+    args = p.parse_args()
 
-    src = Path(sys.argv[1])
-    if not src.exists():
-        print(f"❌  ファイルが見つかりません: {src}", file=sys.stderr)
-        sys.exit(1)
+    if not args.input.is_file():
+        print("[エラー] ファイルが見つかりません: {0}".format(args.input),
+              file=sys.stderr)
+        raise SystemExit(1)
 
-    dst = Path(sys.argv[2]) if len(sys.argv) >= 3 else src.with_suffix(".sbv")
-    convert(src, dst)
+    dst = args.output or args.input.with_suffix(".sbv.txt")
+    try:
+        raise SystemExit(run(args, dst))
+    except SystemExit:
+        raise
+    except ConversionError as exc:
+        print("[中止] {0}".format(exc), file=sys.stderr)
+        try:
+            if dst.exists():
+                dst.unlink()      # 書きかけを残さない
+        except OSError:
+            pass
+        raise SystemExit(2 if args.strict else 1)
+    except (OSError, UnicodeError, ValueError) as exc:
+        print("[エラー] {0}".format(exc), file=sys.stderr)
+        try:
+            if dst.exists():
+                dst.unlink()
+        except OSError:
+            pass
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
