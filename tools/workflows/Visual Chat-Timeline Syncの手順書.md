@@ -138,6 +138,8 @@ AIの横読み防止のための「区切り線」と、文字起こし用の「
 ```bash
 # デフォルト設定で結合（5枚結合・区切り線4px・薄グレー）
 python combine.py --input ./thinned --output ./combined
+python combine.py --input ./thinned --output ./combined --interval 15
+python combine_fixed.py  --input ./thinned  --output ./combined  --per-row 5  --wide-per-page 5  --interval 15
 ```
 
 **結果:** 約250枚の画像が **約50枚の結合画像** にまとまり、各コマの上に `[0:00:00]`、`[0:00:15]` などのタイムスタンプが焼き込まれて `./combined` に出力されます。
