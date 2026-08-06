@@ -1,0 +1,8 @@
+SKILL.md
+README.md
+DESIGN_NOTES.md
+requirements.txt
+manifest.txt
+scripts/collect_video_durations.py
+scripts/test_collect_video_durations.py
+examples/urls.txt
