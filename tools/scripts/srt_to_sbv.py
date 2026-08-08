@@ -17,11 +17,20 @@ SRT → SBV 変換（YouTube ローリング字幕の重複を「完全一致」
   python srt_to_sbv.py input.srt
   python srt_to_sbv.py input.srt output.sbv.txt
 
+効果音マーカーの削除（既定で有効）
+  既定で [音楽] 行を削除する。マーカーを消した結果その字幕の本文が
+  空になった場合は、その字幕（タイムライン）ごと削除する。本文が
+  残る場合はマーカー行だけを取り除き、タイムラインは維持する。
+  何を削除したかは監査ログ（.audit.txt）に記録する（終了コードには影響しない）。
+
 主なオプション
   --strict            断定できない箇所があれば中止（出力を残さない）
   --lenient           壊れたブロックをエラーにせず警告してスキップ
   --preserve-times    元のタイムコードをそのまま使う（既定は中継分を前へ延長）
-  --no-merge-markers  [音楽] 等の連続マーカーを統合しない
+  --remove-markers L  削除する効果音マーカーを指定（既定: 音楽）
+                      例: --remove-markers "音楽,拍手,笑い" / "[音楽]" 形式も可
+  --no-remove-markers 効果音マーカーを削除しない（従来動作）
+  --no-merge-markers  [拍手] 等の連続マーカーを統合しない
   --report FILE       監査ログの出力先（既定: 出力ファイル名 + .audit.txt）
   --quiet             標準出力を最小限にする
 
@@ -50,6 +59,13 @@ import re
 import sys
 from pathlib import Path
 
+# Windows コンソール（CP932）でも日本語の表示で落ちないよう UTF-8 に強制する。
+# 出力ファイルは常に UTF-8 で書くため、この設定は画面表示のみに影響する。
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 # ── 定数 ──────────────────────────────────────────────────────────────────────
 
 # 中継（settle）キューとみなす継続時間の上限。
@@ -75,9 +91,37 @@ INLINE_TIME_RE = re.compile(r"<\d{1,3}:\d{2}:\d{2}[,.]\d{1,3}>")
 # [音楽] [拍手] [笑い] のような効果音マーカー
 MARKER_RE = re.compile(r"^\[[^\[\]\n]+\]$")
 
+# 既定で削除する効果音マーカーのラベル（角括弧の中身。前後の空白は無視して照合）。
+# ここに追記するか、--remove-markers で上書きできる。
+REMOVE_MARKER_LABELS_DEFAULT = ("音楽",)
+
 
 class ConversionError(Exception):
     """変換を中止すべき異常。"""
+
+
+def marker_label(line):
+    """行が [ラベル] 形式ならラベル部分（前後空白除去）を返す。違えば None。"""
+    if not MARKER_RE.match(line):
+        return None
+    return line.strip()[1:-1].strip()
+
+
+def resolve_remove_labels(args):
+    """削除対象マーカーのラベル集合を確定する。'[音楽]' でも '音楽' でも受ける。"""
+    if args.no_remove_markers:
+        return set()
+    raw = args.remove_markers
+    if raw is None:
+        raw = ",".join(REMOVE_MARKER_LABELS_DEFAULT)
+    labels = set()
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if tok.startswith("[") and tok.endswith("]"):
+            tok = tok[1:-1].strip()
+        if tok:
+            labels.add(tok)
+    return labels
 
 
 # ── タイムコード ─────────────────────────────────────────────────────────────
@@ -190,6 +234,52 @@ def parse_srt(text, lenient, warn):
     if not cues:
         raise ConversionError("有効な字幕ブロックが 1 つもありません。")
     return cues
+
+
+# ── 効果音マーカーの削除 ──────────────────────────────────────────────────────
+
+def strip_markers(cues, remove_labels, info):
+    """
+    remove_labels に一致するマーカー行（例: [音楽]）をキューから削除する。
+    削除の結果そのキューの本文が空になった場合は、キュー（タイムライン）ごと落とす。
+    本文が残る場合はマーカー行だけを取り除き、タイムラインは維持する。
+    戻り値: (残ったキューのリスト, {"removed": 行数, "dropped": タイムライン数})
+    """
+    kept = []
+    stats = {"removed": 0, "dropped": 0}
+    if not remove_labels:
+        return cues, stats
+
+    for c in cues:
+        new_lines = []
+        removed_here = []
+        for ln in c.lines:
+            lab = marker_label(ln)
+            if lab is not None and lab in remove_labels:
+                removed_here.append(ln)
+            else:
+                new_lines.append(ln)
+
+        if not removed_here:
+            kept.append(c)
+            continue
+
+        stats["removed"] += len(removed_here)
+        if new_lines:
+            # 本文が残る -> マーカー行だけ削除してタイムラインは維持
+            c.lines = new_lines
+            info("マーカー行削除 {0}: {1}  (残: {2})".format(
+                ms_to_sbv(c.start_ms), " / ".join(removed_here),
+                " / ".join(new_lines)))
+            kept.append(c)
+        else:
+            # 本文が空になった -> このタイムラインごと削除
+            stats["dropped"] += 1
+            info("空タイムライン削除 {0} --> {1}: {2}".format(
+                ms_to_sbv(c.start_ms), ms_to_sbv(c.end_ms),
+                " / ".join(removed_here)))
+
+    return kept, stats
 
 
 # ── ローリング重複の除去 ──────────────────────────────────────────────────────
@@ -319,9 +409,14 @@ def build_sbv(blocks):
 
 def run(args, dst):
     warnings = []
+    infos = []
 
     def warn(msg):
         warnings.append(msg)
+
+    def info(msg):
+        pass
+        # infos.append(msg)
 
     def note(msg):
         if not args.quiet:
@@ -331,6 +426,16 @@ def run(args, dst):
 
     raw = args.input.read_text(encoding="utf-8-sig")
     cues = parse_srt(raw, args.lenient, warn)
+    src_blocks_total = len(cues)   # 削除前の元ブロック数
+
+    # 効果音マーカー（既定: [音楽]）を削除。空になったタイムラインは丸ごと落とす。
+    remove_labels = resolve_remove_labels(args)
+    cues, marker_stats = strip_markers(cues, remove_labels, info)
+    if not cues:
+        raise ConversionError(
+            "マーカー（{0}）を削除した結果、字幕が 1 つも残りませんでした。".format(
+                "、".join("[" + x + "]" for x in sorted(remove_labels))))
+
     blocks, stats = dedupe(cues, args.preserve_times, args.strict, warn)
 
     merged = 0
@@ -352,7 +457,12 @@ def run(args, dst):
         chars = sum(len(b.text) for b in blocks)
         kinds = len(set(l for c in cues for l in c.lines))
         print("[完了] {0} -> {1}".format(args.input.name, dst.name))
-        print("  元SRTブロック        : {0}".format(stats["source"]))
+        print("  元SRTブロック        : {0}".format(src_blocks_total))
+        if remove_labels:
+            print("  マーカー削除         : {0} 行（{1}）".format(
+                marker_stats["removed"],
+                "、".join("[" + x + "]" for x in sorted(remove_labels))))
+            print("  空タイムライン削除   : {0}".format(marker_stats["dropped"]))
         print("  空ブロック           : {0}".format(stats["empty"]))
         print("  完全一致の持ち越し   : {0}".format(stats["carryover"]))
         print("  マーカー統合         : {0}".format(merged))
@@ -361,8 +471,19 @@ def run(args, dst):
             len(blocks), chars))
         print("  取りこぼし検証       : OK（入力の全 {0} 種の行が出力に存在）".format(kinds))
 
+    # 監査ログ: 削除したマーカーの明細（情報）と警告を別セクションで記録する。
+    sections = []
+    if infos:
+        sections.append(
+            "── 削除した効果音マーカー（{0} 行 / 空タイムライン {1} 個）──\n".format(
+                marker_stats["removed"], marker_stats["dropped"])
+            + "\n".join(infos))
     if warnings:
-        report.write_text("\n".join(warnings) + "\n", encoding="utf-8")
+        sections.append("── 警告（{0} 件）──\n".format(len(warnings))
+                        + "\n".join(warnings))
+
+    if warnings:
+        report.write_text("\n\n".join(sections) + "\n", encoding="utf-8")
         print("  [警告] {0} 件 -> {1}".format(len(warnings), report.name),
               file=sys.stderr)
         for w in warnings[:5]:
@@ -371,7 +492,12 @@ def run(args, dst):
             print("      …他 {0} 件".format(len(warnings) - 5), file=sys.stderr)
         return 3
 
-    if args.report:
+    # 警告なし（終了コード 0）。マーカーを削除した場合は明細を記録して案内する。
+    if sections:
+        report.write_text("\n\n".join(sections) + "\n", encoding="utf-8")
+        if infos and not args.quiet:
+            print("  削除ログ             : {0}".format(report.name))
+    elif args.report:
         report.write_text("警告なし：全ブロック検証済み\n", encoding="utf-8")
     return 0
 
@@ -387,8 +513,12 @@ def main():
                    help="壊れたブロックをエラーにせず警告してスキップ")
     p.add_argument("--preserve-times", action="store_true",
                    help="元のタイムコードをそのまま使う")
+    p.add_argument("--remove-markers", metavar="LABELS",
+                   help="削除する効果音マーカーをカンマ区切りで指定（既定: 音楽）")
+    p.add_argument("--no-remove-markers", action="store_true",
+                   help="効果音マーカーを削除しない（従来動作）")
     p.add_argument("--no-merge-markers", action="store_true",
-                   help="[音楽] 等の連続マーカーを統合しない")
+                   help="[拍手] 等の連続マーカーを統合しない")
     p.add_argument("--report", metavar="FILE", help="監査ログの出力先")
     p.add_argument("--quiet", action="store_true")
     args = p.parse_args()

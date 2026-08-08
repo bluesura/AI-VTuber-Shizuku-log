@@ -1,0 +1,13 @@
+# 既知機能レジストリ（capability判定の突合先。四半期棚卸しで更新）
+# feature_id	名称	状態	備考
+pomodoro	ポモドーロ機能	wiki掲載済	Discord限定
+asmr	全肯定ASMR / 全否定ASMR	wiki掲載済	辛口・極辛対応
+whisper	耳元ささやき機能	wiki掲載済	
+talk-discord	しずくのおしゃべり機能	wiki掲載済	Discord限定
+multilingual	多言語対応	wiki掲載済	日英中韓ほか
+song	歌	確認済(2026-03頃)	X上で歌枠言及 2026-03-20
+persona-gal	ギャルモード	確認済(2026-05-24配信)	人格モード系列
+persona-ojousama	お嬢様モード	言及のみ(2026-08-02配信 38:35)	初出日未特定
+paralinguistic	非言語音声(舌打ち/鳴き真似/寝息/笑い声/声質転換)	候補(遅くとも2026-04-26)	試聴確認待ち
+memory-regulars	常連認識・名前呼び	候補(2026-04-26配信 4:12ほか)	試聴確認待ち
+motivation-gauge	やる気ゲージ	確認済(2026-07-24配信)	概要欄由来・字幕には出ない

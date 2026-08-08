@@ -1,0 +1,18 @@
+# 匿名化しない名前（1行1件）
+# ・このファイルは download_youtube_subtitles.py と同じフォルダに置くと自動で読み込まれます
+# ・照合は「前後の空白・先頭の @ ・大文字小文字」を無視して行われます
+# ・チャンネルID（UCxxxxxxxx...）を書いても照合対象になります
+# ・スクリプト内の WHITELIST_DEFAULT と合成されるので、ここには追加分だけ書けばOKです
+
+Aki
+aki5503
+AIVtuber_Shizuku
+Shizuku_AItuber
+Shizuku
+しずく
+あき先生
+
+# 表記ゆれや別アカウントが増えたらここに追記してください
+# 例）
+# あき先生【AIVtuber開発】
+# UC1234567890abcdefghijk
