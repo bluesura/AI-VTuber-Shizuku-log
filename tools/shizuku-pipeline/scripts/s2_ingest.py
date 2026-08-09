@@ -39,17 +39,41 @@ def verify_chat_text(idx, t, text):
             return True
     return any(text in ctext for _, ctext in idx)  # 時刻ずれ救済（全体照合）
 
+def locate(file_arg, mode, key):
+    """--file が見つからないとき data/llm_out/ から key を含む .jsonl を自動で探す。
+    保存名が cards_/extract_ どちらでも、多少ずれていても拾えるようにする。"""
+    p = Path(file_arg)
+    if p.exists(): return p
+    outdir = DATA / "llm_out"
+    cands = []
+    if outdir.exists():
+        for f in outdir.glob("*.jsonl"):
+            if key in f.name and "judg" not in f.name.lower():
+                cands.append(f)
+    if len(cands) == 1:
+        print(f"  （--file が無いので data/llm_out/ から自動検出: {cands[0].name}）")
+        return cands[0]
+    if len(cands) > 1:
+        print(f"  ! 候補が複数あります。--file で1つ指定してください: {[c.name for c in cands]}")
+    return p
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--file", required=True)
+    ap.add_argument("--file", required=True, help="Claude出力のJSONL（data/llm_out/ 推奨。名前が違っても --from のIDから探します）")
     ap.add_argument("--from", dest="src", required=True, help="stream:<vid> か x:<YYYY-MM>")
     a = ap.parse_args()
     mode, key = a.src.split(":", 1)
-    raw = jsonl_read(a.file)
+    fpath = locate(a.file, mode, key)
+    if not Path(fpath).exists():
+        print(f"エラー: {a.file} が見つかりません。data/llm_out/ に保存したか、パスを確認してください。"); return
+    raw = jsonl_read(fpath)
     if not raw:
         print("カードが読めませんでした"); return
 
     chat_idx = load_chat_index(key) if mode == "stream" else []
+    smeta = stream_meta(key) if mode == "stream" else {}
+    ocr_chat = (smeta.get("chat_source") == "ocr")
+    event_date = smeta.get("event_date")
     x_idx = load_x_index(key) if mode == "x" else {}
     by_id, _ = load_all_cards()
     warns, add, loops = [], [], []
@@ -72,6 +96,8 @@ def main():
         # 逐語ルールの機械検証（ゲート1の前段）
         def check_part(text, claimed):
             if mode == "stream":
+                if ocr_chat and claimed:
+                    return False, "OCR復元チャットのため逐語不可 → verbatim=false"
                 if src.get("type") == "yt" and claimed and not verify_chat_text(chat_idx, src.get("t"), text):
                     return False, "yt由来のverbatim=trueをfalseへ（試聴で確定するまで逐語扱いしない）"
                 if claimed and verify_chat_text(chat_idx, src.get("t"), text): return True, None
@@ -101,6 +127,9 @@ def main():
                 warns.append(f"{i}行目: expected_signal欠落 → 破棄"); continue
         if not c.get("date_jst"):
             warns.append(f"{i}行目: date_jst欠落 → 破棄"); continue
+        if event_date and c["date_jst"] != event_date:
+            c["upload_date"] = c["date_jst"]; c["date_jst"] = event_date
+            warns.append(f"{i}行目: アーカイブ再アップのため日付を {c['upload_date']} → {event_date} に補正")
         # 安定ID・状態
         body = c.get("text") or json.dumps(c.get("parts", ""), ensure_ascii=False)
         c["id"] = f"{base}-{kind[:2]}{sha8(kind + body)[:6]}"
@@ -120,6 +149,12 @@ def main():
     for m, cs in months.items(): jsonl_append(DATA / "cards" / f"{m}.jsonl", cs)
     if loops: jsonl_append(DATA / "ledger" / "open.jsonl", loops)
 
+    from datetime import date as _date
+    ex = load_state("extracted.json", {})
+    k = f"{'stream' if mode == 'stream' else 'x'}:{key}"
+    prev = ex.get(k, {}).get("cards", 0)
+    ex[k] = {"cards": prev + len(add), "at": _date.today().isoformat()}
+    save_state("extracted.json", ex)
     kinds = {}
     for c in add: kinds[c["kind"]] = kinds.get(c["kind"], 0) + 1
     print(f"取込: {len(add)}枚 " + " ".join(f"{k}:{v}" for k, v in sorted(kinds.items())))

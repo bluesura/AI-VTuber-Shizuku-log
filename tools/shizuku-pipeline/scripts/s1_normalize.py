@@ -83,8 +83,12 @@ def process_stream(d, fixes, fams, desc_state, first):
     out = DATA / "normalized" / "streams" / vid
     meta = parse_info(d / "info.txt") if (d / "info.txt").exists() else {}
     meta.update({"date": meta.get("date") or date, "video_id": vid, "dir": d.name})
-    blocks = parse_sbv(d / "sbv.txt")
-    chat = parse_chat(d / "chat.txt")
+    subp, subfmt = find_subs(d)
+    if not subp:
+        print(f"  ! {d.name}: 字幕ファイルが無いためスキップ"); return
+    blocks = parse_subs(subp, subfmt)
+    chatp, chat_src = find_chat(d)
+    chat = parse_chat(chatp) if chatp else []
     sents_raw = rejoin_sentences(blocks)
     rows, fix_total = [], 0
     for t, s in sents_raw:
@@ -101,6 +105,7 @@ def process_stream(d, fixes, fams, desc_state, first):
     if first:
         novel_desc_lines(vid, meta.get("description", ""), desc_state)  # 基準線として登録のみ
     signals = {
+        "chat_source": chat_src,
         "bursts": bursts,
         "chat_median_per30s": med,
         "asr_silent_chat_dense": mism,
@@ -110,19 +115,27 @@ def process_stream(d, fixes, fams, desc_state, first):
         "novel_description_lines": novel + (["(この配信が基準線: 全行を登録)"] if first else []),
     }
     write(out / "signals.json", json.dumps(signals, ensure_ascii=False, indent=1))
-    meta.update({"blocks": len(blocks), "sentences": len(rows), "chat_msgs": len(chat),
+    rel = load_relations().get(vid)
+    meta["relation"] = rel
+    meta["event_date"] = None
+    if rel and rel["rel"] in ("archive_of", "reupload_of"):
+        om = stream_meta(rel["other"]) or {}
+        meta["event_date"] = om.get("date") or None
+    meta.update({"subtitle_format": subfmt, "chat_source": chat_src, "blocks": len(blocks), "sentences": len(rows), "chat_msgs": len(chat),
                  "duration_sec": duration, "dict_fixes_applied": fix_total,
                  "noise_blocks": sum(1 for _, t in blocks if NOISE_RE.search(t))})
     write(out / "meta.json", json.dumps(meta, ensure_ascii=False, indent=1))
-    print(f"  {date} {vid}: {len(blocks)}ブロック→{len(rows)}文 / チャット{len(chat)}件 / "
+    print(f"  {date} {vid}[{subfmt}]: {len(blocks)}ブロック→{len(rows)}文 / チャット{len(chat)}件{'(OCR)' if chat_src=='ocr' else ''} / "
           f"辞書適用{fix_total}箇所 / バースト{len(bursts)} / ミスマッチ{len(mism)}区間 / 概要欄新規行{len(novel)}")
 
 def process_x():
     rows_by_id = {}
     for f in sorted((DATA / "raw" / "x").glob("*.tsv")) + sorted((DATA / "raw" / "x").glob("*.txt")):
         txt = read(f).replace("\r\n", "\n")
-        if not txt.strip() or "URL" not in txt.splitlines()[0]:
-            print(f"  ! {f.name}: TSVとして読めない（doctor.py 参照）"); continue
+        if txt.strip() in ("なし", "無し", "なし。", ""):
+            print(f"  - {f.name}: 空記録（「なし」）としてスキップ ＝ 休眠期なら正常"); continue
+        if "URL" not in txt.splitlines()[0]:
+            print(f"  ! {f.name}: TSVヘッダが無い（DATA-ISSUES §6 参照）"); continue
         rd = csv.reader(io.StringIO(txt), delimiter="\t")
         header = next(rd)
         idx = {h: i for i, h in enumerate(header)}

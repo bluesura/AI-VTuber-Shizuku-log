@@ -82,11 +82,79 @@ def parse_sbv(path):
             out.append((t, "".join(lines[1:])))
     return out
 
+TC_RE = re.compile(r"(\d+):(\d{2}):(\d{2})[.,](\d{1,3})\s*-->")
+TAG_RE = re.compile(r"<[^>]+>")
+
+def parse_srt(path):
+    """SRT/VTT -> [(t_sec, text)]。YouTube自動字幕特有の「前のキューを含んだまま伸びる」
+    ローリング重複は、直前と完全な前方一致の場合のみ差分だけ残す。"""
+    raw = read(path).replace("\r\n", "\n")
+    cues, cur_t, buf = [], None, []
+    def flush():
+        if cur_t is not None:
+            s = TAG_RE.sub("", " ".join(buf)).strip()
+            if s: cues.append((cur_t, s))
+    for line in raw.split("\n"):
+        m = TC_RE.search(line)
+        if m:
+            flush()
+            h, mi, s, _ = m.groups()
+            cur_t, buf = int(h)*3600 + int(mi)*60 + int(s), []
+        elif line.strip() == "" or re.match(r"^\d+$", line.strip()) or line.startswith("WEBVTT"):
+            continue
+        else:
+            buf.append(line.strip())
+    flush()
+    out = []
+    for t, s in cues:
+        if out and s.startswith(out[-1][1]) and len(s) > len(out[-1][1]):
+            s = s[len(out[-1][1]):].strip()
+            if not s: continue
+        out.append((t, s))
+    return out
+
+def find_chat(stream_dir):
+    """チャットを探す。実チャット優先、無ければOCR復元。 -> (path, 'live'|'ocr') or (None, None)"""
+    d = Path(stream_dir)
+    if (d / "chat.txt").exists(): return d / "chat.txt", "live"
+    if (d / "chat_ocr.txt").exists(): return d / "chat_ocr.txt", "ocr"
+    return None, None
+
+def _load_tsv(name):
+    rows, p = [], CONF / name
+    if p.exists():
+        for line in read(p).splitlines():
+            if line.startswith("#") or not line.strip(): continue
+            rows.append(line.split("\t"))
+    return rows
+
+def load_known_absent():
+    """{(video_id, kind): 理由}"""
+    return {(r[0].strip(), r[1].strip()): (r[2].strip() if len(r) > 2 else "")
+            for r in _load_tsv("known_absent.tsv") if len(r) >= 2}
+
+def load_relations():
+    """{video_id: {'rel','other','note'}}"""
+    return {r[0].strip(): {"rel": r[1].strip(), "other": r[2].strip(),
+                           "note": (r[3].strip() if len(r) > 3 else "")}
+            for r in _load_tsv("stream_relations.tsv") if len(r) >= 3}
+
+def find_subs(stream_dir):
+    """配信ディレクトリから字幕を探す。SBV優先、無ければSRT。 -> (path, 'sbv'|'srt') or (None, None)"""
+    d = Path(stream_dir)
+    for name, fmt in (("sbv.txt", "sbv"), ("srt.txt", "srt")):
+        if (d / name).exists(): return d / name, fmt
+    return None, None
+
+def parse_subs(path, fmt=None):
+    fmt = fmt or ("srt" if str(path).endswith("srt.txt") else "sbv")
+    return parse_srt(path) if fmt == "srt" else parse_sbv(path)
+
 def parse_chat(path):
     """live_chat -> [(t_sec, user, text)]（負時刻=配信開始前）"""
     msgs = []
     for line in read(path).splitlines():
-        m = re.match(r"^\[(-?)(?:(\d+):)?(\d+):(\d+)\]\s+(@\S+?):\s?(.*)", line)
+        m = re.match(r"^\[(-?)(?:(\d+):)?(\d+):(\d+)\]\s+(@\S*?):\s?(.*)", line)
         if m:
             neg, h, mi, s, u, tx = m.groups()
             t = (int(h or 0)*3600 + int(mi)*60 + int(s)) * (-1 if neg else 1)

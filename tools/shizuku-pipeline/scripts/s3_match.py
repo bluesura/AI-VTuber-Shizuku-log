@@ -16,31 +16,36 @@ MATCH_KINDS = {"event", "capability", "stream_note", "profile_fact"}
 
 def build():
     opens = [l for l in jsonl_read(DATA / "ledger" / "open.jsonl") if l.get("status") == "open"]
-    seen = set(load_state("match_seen.json", []))
+    # 「照合済みペア」を記録する（旧方式=照合済みカードだと、後から開いたループが
+    #  既処理カードと二度と結びつかず、回収を取りこぼすため。ペア単位なら処理順に依存しない）
+    seen_pairs = set(load_state("match_seen.json", []))
     by_id, _ = load_all_cards()
-    news = [c for c in by_id.values() if c["kind"] in MATCH_KINDS and c["id"] not in seen]
+    cards = [c for c in by_id.values() if c["kind"] in MATCH_KINDS]
     pairs = []
     for lo in opens:
         ltok = tokenize((lo.get("text") or "") + " " + (lo.get("expected_signal") or ""))
-        for c in news:
+        for c in cards:                                  # 全カードが対象（seenで絞らない）
             if c["id"] == lo["loop_id"]: continue
-            if c.get("date_jst", "") <= lo.get("opened", ""): continue
+            if c.get("date_jst", "") <= lo.get("opened", ""): continue  # 因果: 開封後の出来事のみ
+            pid = f"{lo['loop_id']}__{c['id']}"
+            if pid in seen_pairs: continue               # 既に一度出したペアは繰り返さない
             ctok = tokenize((c.get("text") or "") + " " + (c.get("summary") or "") + " " + " ".join(c.get("evidence", [])))
             hit = bool(ltok & ctok) or any(
                 (a in b or b in a) for a in ltok for b in ctok if len(a) >= 2 and len(b) >= 2)
             if hit:
-                pairs.append({"pair_id": f"{lo['loop_id']}__{c['id']}",
+                pairs.append({"pair_id": pid,
                               "loop": {k: lo[k] for k in ("loop_id","opened","loop_type","text","expected_signal") if k in lo},
                               "card": {k: c.get(k) for k in ("id","kind","date_jst","summary","text")}})
-    seen |= {c["id"] for c in news}
-    save_state("match_seen.json", sorted(seen))
+    seen_pairs |= {p["pair_id"] for p in pairs}
+    save_state("match_seen.json", sorted(seen_pairs))
     if not pairs:
-        print(f"照合対象なし（新カード{len(news)}枚 × open{len(opens)}件、語彙重なりゼロ）"); return
+        print(f"照合対象なし（カード{len(cards)}枚 × open{len(opens)}件、新規ペアなし）"); return
     out = DATA / "packs" / f"match_{date.today().isoformat()}.txt"
     write(out, read(PROMPTS / "match_pairs.md") + "\n" +
           "\n".join(json.dumps(p, ensure_ascii=False) for p in pairs) + "\n")
     print(f"生成: {out.relative_to(BASE)}  （{len(pairs)}ペア）")
-    print("→ Claudeに添付 → 判定JSONLを保存 → python scripts/s3_match.py --ingest <ファイル>")
+    print("→ Claudeに添付 → 判定JSONLを data/llm_out/judgments_<日付>.jsonl として保存"
+          "\n→ python scripts/s3_match.py --ingest data/llm_out/judgments_<日付>.jsonl")
 
 def ingest(path):
     js = jsonl_read(path)

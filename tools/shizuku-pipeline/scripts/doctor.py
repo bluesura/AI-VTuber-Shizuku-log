@@ -20,11 +20,23 @@ def main():
 
     # --- D07 ファイル完全性 ---
     R.append("## D07 ファイル完全性（→ DATA-ISSUES.md §7）")
-    need = ["sbv.txt", "chat.txt", "info.txt", "comments.txt"]
+    absent = load_known_absent()
+    SEV = {"字幕": "ERROR", "info": "WARN", "chat": "WARN", "comments": "INFO"}
     for d in stream_dirs():
-        miss = [f for f in need if not (d / f).exists()]
-        if miss: add("ERROR", "D07", f"{d.name}: 不足 {','.join(miss)}")
-        for f in need:
+        vid = d.name.split("_", 1)[1]
+        miss = []
+        if not find_subs(d)[0]: miss.append("字幕")
+        if not (d / "info.txt").exists(): miss.append("info")
+        if not find_chat(d)[0]: miss.append("chat")
+        if not (d / "comments.txt").exists(): miss.append("comments")
+        known = [m for m in miss if (vid, m) in absent]
+        for m in [x for x in miss if x not in known]:
+            add(SEV.get(m, "WARN"), "D07", f"{d.name}: {m} が無い" +
+                ("（元動画にコメントが無い場合は正常。恒久的なら known_absent.tsv へ → §7）" if m == "comments"
+                 else "（取得漏れでなければ known_absent.tsv へ → §7）"))
+        for m in known:
+            add("INFO", "D07", f"{d.name}: {m} 不在（既知: {absent[(vid, m)][:40]}）")
+        for f in ["chat.txt", "info.txt", "comments.txt"]:
             p = d / f
             if p.exists():
                 try:
@@ -41,15 +53,17 @@ def main():
         vid = d.name.split("_", 1)[1]
         nd = DATA / "normalized" / "streams" / vid
         R.append(f"### {d.name}")
-        blocks = parse_sbv(d / "sbv.txt") if (d / "sbv.txt").exists() else []
-        chat = parse_chat(d / "chat.txt") if (d / "chat.txt").exists() else []
+        subp, subfmt = find_subs(d)
+        blocks = parse_subs(subp, subfmt) if subp else []
+        chatp, chatsrc = find_chat(d)
+        chat = parse_chat(chatp) if chatp else []
         if not blocks:
             add("ERROR", "D07", "字幕ブロックが0件"); continue
         # D03 ノイズ率・断片
         noise = sum(1 for _, t in blocks if NOISE_RE.search(t))
         sents = rejoin_sentences(blocks)
         junk = sum(1 for _, s in sents if len(NOISE_RE.sub("", s)) <= 2)
-        add("INFO", "D03", f"[音楽]等ノイズ: {noise}/{len(blocks)}ブロック ({100*noise//max(1,len(blocks))}%) / "
+        add("INFO", "D03", f"字幕形式={subfmt} / [音楽]等ノイズ: {noise}/{len(blocks)}ブロック ({100*noise//max(1,len(blocks))}%) / "
                            f"再結合: {len(blocks)}→{len(sents)}文 / 極短文(ゴミ候補): {junk}")
         # D02 辞書ヒット + 未登録候補（字幕頻出なのにチャットに現れない語）
         joined = "".join(s for _, s in sents)
@@ -71,6 +85,18 @@ def main():
             if mm:
                 add("INFO", "D04", "字幕沈黙×チャット密集（非言語音イベント候補・仕様であり不備ではない）: " +
                     " / ".join(m["mmss"] for m in mm[:6]) + " → §4")
+        # D12 OCR復元チャット
+        if chatsrc == "ocr":
+            ts = sorted({t for t, _, _ in chat})
+            grid = min({ts[i+1]-ts[i] for i in range(len(ts)-1)}) if len(ts) > 1 else 0
+            add("WARN", "D12", f"チャットはOCR復元（{len(chat)}件・時刻粒度およそ{grid}秒）。"
+                               f"逐語引用は不可・件数は下限値として扱う → §13")
+        # D13 アーカイブ再アップ
+        rel = (stream_meta(vid) or {}).get("relation")
+        if rel:
+            ev = (stream_meta(vid) or {}).get("event_date")
+            add("INFO", "D13", f"{rel['rel']} → {rel['other']}。出来事の日付は "
+                               f"{ev or '(元配信のmeta未生成)'} として扱う → §14")
         # D10 チャット時刻
         neg = sum(1 for t, _, _ in chat if t < 0)
         desc = sum(1 for i in range(1, len(chat)) if chat[i][0] < chat[i-1][0] - 1)

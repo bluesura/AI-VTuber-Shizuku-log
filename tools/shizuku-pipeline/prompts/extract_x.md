@@ -26,4 +26,7 @@ summary, wiki_target[], salience{likes, views}, evidence[]（引用RTなら quot
 - 迷ったら省く。反響（likes）か掛け合い成立が根拠になるものを優先。
 
 ---
+【保存方法（人間向け）】このチャットの出力（JSONL）は、**添付したパックと同じファイル名で拡張子だけ .jsonl に変えて** `data/llm_out/` に保存してください。（例: extract_2026-05-31_KMKfe71ZnhI.txt → data/llm_out/extract_2026-05-31_KMKfe71ZnhI.jsonl）
+
+---
 以下、当月の正規化済みポスト。

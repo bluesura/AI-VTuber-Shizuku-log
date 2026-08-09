@@ -40,3 +40,36 @@ censored_transcript.txt
 # LLMプロンプト作業時の各種一時ファイル
 *.bak
 *.tmp
+
+# ============================================================
+# shizuku-pipeline（tools/shizuku-pipeline）の生成データ
+# 方針: 「再生成できるもの」は上げない / 「再生成できないもの」は上げる
+#   再生成できる  = ログ + config + スクリプトから決定的に作り直せる（約80MB）
+#   再生成できない = LLMの出力・人間の判断・作業の進捗（約1MB）
+# フォルダを移動した場合は下の tools/shizuku-pipeline/ の部分を読み替えること
+# ============================================================
+
+# --- 上げない: logs/ の複製（バイト単位のコピー。上げるとリポジトリが二重になる） ---
+# 元ファイルは logs/ にあり、s0_intake.py でいつでも再構築できる
+# origin.json にはローカルの絶対パス（D:\... 等）が入るため、その意味でも上げない
+tools/shizuku-pipeline/data/raw/
+
+# --- 上げない: 決定的な中間生成物（s1_normalize.py で再構築可・96本で約25MB） ---
+# 文再結合・辞書適用・JST変換の結果。TSVは1文字の辞書変更で全行が差分になり履歴を汚す
+tools/shizuku-pipeline/data/normalized/
+
+# --- 上げない: Claudeに添付するパック（s2_pack.py で再構築可・96本で約35MB） ---
+# 中身はプロンプト＋ログの再掲。WORKLIST.md も --all のたびに作り直される
+tools/shizuku-pipeline/data/packs/
+
+# --- 上げない: doctorレポート（毎回上書きされる健診結果。必要なら手動で複製して保存） ---
+tools/shizuku-pipeline/data/review/doctor_report.md
+
+# --- 上げる（下記は無視しない。念のため明示） ---
+# data/llm_out/  … Claudeの生出力そのもの。**再実行しても同じものは二度と得られない**
+# data/cards/    … 検証済みカード庫。wikiの記述を出典まで遡れる台帳の本体
+# data/ledger/   … 未回収/回収済みの伏線。このパイプラインで最も価値のある蓄積
+# data/review/   … レビューパケット（人間が試聴して書き込んだ逐語・採否の記録）
+# data/handoff/  … 実際にwikiへ渡した内容。編集の根拠を後から説明できる
+# data/state/    … 処理済み・レビュー中の進捗。消すと同じ作業を二重にやることになる
+# config/        … 辞書・語彙群・機能レジストリ・既知の不在・配信の関係
