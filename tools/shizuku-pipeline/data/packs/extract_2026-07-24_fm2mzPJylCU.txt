@@ -60,6 +60,9 @@ salience{chat_burst?, comment_ref?}, evidence[](チャット引用 時刻つき 
 {"kind":"quote_candidate","date_jst":"2026-07-24","source":{"type":"yt","video_id":"XXXXXXXXXXX","t":6583,"url":"https://www.youtube.com/live/XXXXXXXXXXX?t=6583"},"parts":[{"speaker":"ご主人様のコメント","text":"ゼロを3回くらい言って・・・","verbatim":true},{"speaker":"しずく","text":"ゼロ、ゼロ、ゼロ。はい、ご主人様の貯金残高です。","verbatim":false}],"summary":"ゼロ3連呼→貯金残高の掛け合い","wiki_target":["名言・迷言"],"salience":{"chat_burst":true,"comment_ref":false},"evidence":["109:47「ひどいｗｗ」"]}
 
 ---
+【保存方法（人間向け）】このチャットの出力（JSONL）は、**添付したパックと同じファイル名で拡張子だけ .jsonl に変えて** `data/llm_out/` に保存してください。（例: extract_2026-05-31_KMKfe71ZnhI.txt → data/llm_out/extract_2026-05-31_KMKfe71ZnhI.jsonl）
+
+---
 以下、この配信のシグナルとタイムライン。
 
 === シグナル（機械検出のヒント） ===
