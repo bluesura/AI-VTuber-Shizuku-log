@@ -62,6 +62,7 @@ python scripts/s5_apply.py --packet data/review/RV_xxxx.md
 
 # 健診
 python scripts/doctor.py                           # → data/review/doctor_report.md
+python scripts/repair_cards.py [--apply]            # 壊れたカード(evidence等が非文字列)の修復
 ```
 
 ## データの置き場と意味
@@ -93,6 +94,7 @@ python scripts/doctor.py                           # → data/review/doctor_repo
 - **辞書 `config/asr_fixes.tsv` に曖昧な断片を足さない**（ゲート3）。追加条件は `DATA-ISSUES.md §2`。チャット/Xには適用しないこと。
 - **アーカイブ再アップの日付補正を壊さない。** `config/stream_relations.tsv` の `archive_of` により s2_ingest がカード日付を元配信日へ補正する。これが無いと年表の日付が再アップ日で誤る（`DATA-ISSUES.md §14`）。
 - **OCRチャット（`*.live_chat_ocr.txt`）由来は逐語不可。** s2_ingest が機械的に `verbatim=false` に落とす。この防御を外さない（`DATA-ISSUES.md §13`）。
+- **evidence/wiki_target は必ず文字列リスト。** LLMが dict で返すことがある。取込時に `as_str_list` で正規化済みだが、古いデータで s3/s4 が落ちたら `python scripts/repair_cards.py --apply` で修復する。
 - **bashは環境によりdash。** brace展開が使えないことがある。スクリプトはPythonに寄せる。
 - **変更後は必ず**: `python -c "import py_compile,glob;[py_compile.compile(f,doraise=True) for f in glob.glob('scripts/*.py')]"` で全構文チェック → 可能なら実データで一巡。
 

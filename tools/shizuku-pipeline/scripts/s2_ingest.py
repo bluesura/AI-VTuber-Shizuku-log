@@ -125,6 +125,11 @@ def main():
                 warns.append(f"{i}行目: loop_type不正 '{c.get('loop_type')}' → 破棄"); continue
             if not c.get("expected_signal"):
                 warns.append(f"{i}行目: expected_signal欠落 → 破棄"); continue
+        # evidence / wiki_target をstrリストに正規化（LLMがdictや入れ子で返しても壊さない）
+        c["evidence"] = as_str_list(c.get("evidence"))
+        c["wiki_target"] = as_str_list(c.get("wiki_target"))
+        if isinstance(c.get("guess"), (dict, list)):
+            c["guess"] = flat_text(c.get("guess"))
         if not c.get("date_jst"):
             warns.append(f"{i}行目: date_jst欠落 → 破棄"); continue
         if event_date and c["date_jst"] != event_date:

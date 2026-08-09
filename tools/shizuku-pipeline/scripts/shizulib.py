@@ -241,6 +241,27 @@ def load_lexicon():
     return fams
 
 # ---------- その他 ----------
+def as_str_list(v):
+    """evidence/wiki_target 等を必ず str のリストにして返す。
+    LLMが dict や入れ子で返しても壊れないよう文字列化して回収する。"""
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, dict):
+        parts = [str(v[k]) for k in ("time", "mmss", "t", "speaker", "text", "quote", "comment") if k in v]
+        return [" ".join(parts)] if parts else [json.dumps(v, ensure_ascii=False)]
+    if isinstance(v, (list, tuple)):
+        out = []
+        for x in v:
+            out.extend(as_str_list(x))
+        return out
+    return [str(v)]
+
+def flat_text(v):
+    """任意の値を検索・連結用の1つの文字列に潰す。"""
+    return " ".join(as_str_list(v))
+
 def tokenize(text):
     """日本語の内容語らしき塊を取り出す（照合の前段フィルタ用）"""
     return set(re.findall(r"[一-龥]{2,}|[ァ-ヴー]{2,}|[A-Za-z]{3,}", text or ""))

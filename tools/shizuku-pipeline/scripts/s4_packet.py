@@ -74,7 +74,7 @@ def main():
               f"      試聴: {c['source'].get('url','')}",
               f"      ASR : {fmt_quote(c)}",
               f"      逐語: （←試聴して正確に書き直す。掛け合いは【発話者】形式のまま）",
-              f"      反応: " + " / ".join(c.get("evidence", [])[:3]),
+              f"      反応: " + " / ".join(as_str_list(c.get("evidence"))[:3]),
               f"- [ ] ADOPT {c['id']}   （逐語確定済みのものだけ）",
               f"- [ ] DROP {c['id']}", ""]
 
@@ -82,7 +82,7 @@ def main():
     for c in cap:
         L += [f"- [ ] ADOPT {c['id']}",
               f"      機能仮名: {c.get('feature_hint','?')} / {c.get('summary','')}",
-              f"      証拠: " + " / ".join(c.get("evidence", [])[:3]),
+              f"      証拠: " + " / ".join(as_str_list(c.get("evidence"))[:3]),
               f"      出典: {c['source'].get('url','')}   ⚠試聴で確認 → 採用後レジストリに追記",
               f"- [ ] DROP {c['id']}", ""]
 
@@ -103,7 +103,7 @@ def main():
 
     L.append(f"## E. 紹介ページ供給メモ（profile_fact / stream_note: {len(pf)}件）")
     for c in pf:
-        L += [f"- [ ] ADOPT {c['id']}   [{c['kind']}→{'/'.join(c.get('wiki_target',[]))}] {c.get('summary','')}",
+        L += [f"- [ ] ADOPT {c['id']}   [{c['kind']}→{'/'.join(as_str_list(c.get('wiki_target')))}] {c.get('summary','')}",
               f"      出典: {c['source'].get('url','')}",
               f"- [ ] DROP {c['id']}", ""]
 

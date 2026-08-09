@@ -140,7 +140,7 @@ def main():
     if pfs:
         H.append("=== 紹介ページ補足（該当節ソースと一緒に起草チャットへ） ===")
         for c in pfs:
-            H += [f"[{'/'.join(c.get('wiki_target',[]))}] {c.get('summary','')}  出典: {c['source'].get('url','')}", "---"]
+            H += [f"[{'/'.join(as_str_list(c.get('wiki_target')))}] {c.get('summary','')}  出典: {c['source'].get('url','')}", "---"]
     out = DATA / "handoff" / f"handoff_{Path(a.packet).stem}.txt"
     write(out, "\n".join(H) + "\n")
     print("反映: " + " / ".join(f"{k}:{v}" for k, v in n.items() if v))

@@ -17,7 +17,7 @@
 | `summary` | string | ✓ | 一文要約（年表等に使う） |
 | `wiki_target` | string[] | ✓ | 書き込み先の節（例 `["年表"]`, `["名言・迷言"]`, `["台帳"]`, `["しずくの配信"]`） |
 | `salience` | object | ✓ | 反響の手がかり（`chat_burst`, `comment_ref`, `likes`, `views` 等、任意キー） |
-| `evidence` | string[] | ✓ | 根拠（チャット引用など、時刻付き・各30字目安） |
+| `evidence` | string[] | ✓ | 根拠（チャット引用など、時刻付き）。LLMがdict等で返しても取込時に文字列リストへ正規化（非文字列も受理） |
 | `id` | string | 自動 | 取込時に付与（§4） |
 | `status` | enum | 自動 | `candidate`→`verified`→`approved` / `rejected`（§5） |
 

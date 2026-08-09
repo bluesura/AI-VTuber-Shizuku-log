@@ -23,13 +23,13 @@ def build():
     cards = [c for c in by_id.values() if c["kind"] in MATCH_KINDS]
     pairs = []
     for lo in opens:
-        ltok = tokenize((lo.get("text") or "") + " " + (lo.get("expected_signal") or ""))
+        ltok = tokenize(flat_text([lo.get("text"), lo.get("expected_signal")]))
         for c in cards:                                  # 全カードが対象（seenで絞らない）
             if c["id"] == lo["loop_id"]: continue
             if c.get("date_jst", "") <= lo.get("opened", ""): continue  # 因果: 開封後の出来事のみ
             pid = f"{lo['loop_id']}__{c['id']}"
             if pid in seen_pairs: continue               # 既に一度出したペアは繰り返さない
-            ctok = tokenize((c.get("text") or "") + " " + (c.get("summary") or "") + " " + " ".join(c.get("evidence", [])))
+            ctok = tokenize(flat_text([c.get("text"), c.get("summary"), c.get("evidence")]))
             hit = bool(ltok & ctok) or any(
                 (a in b or b in a) for a in ltok for b in ctok if len(a) >= 2 and len(b) >= 2)
             if hit:
