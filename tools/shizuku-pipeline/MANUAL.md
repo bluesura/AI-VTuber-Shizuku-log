@@ -282,8 +282,24 @@ python scripts/s2_pack.py --all --max-chars 60000  # 分割をもっと細かく
 1. **新しいClaudeチャット**を開く（スキル不要。パックに指示が全部入っています）。どのモデル・思考設定を使うかは「4. LLMモデルの選び方」を参照。
 2. `data/packs/extract_*.txt` を**添付**し、「このファイルの指示に従ってカードを抽出して」と送る。
 3. 返ってきたJSONLを **添付したパックと同じ名前で拡張子だけ .jsonl** にして `data/llm_out/` に保存（例: `extract_2026-05-31_KMKfe71ZnhI.txt` → `data/llm_out/extract_2026-05-31_KMKfe71ZnhI.jsonl`）。名前がずれても `s2_ingest` が `--from` のIDから探すので致命的ではありませんが、揃えるのが安全です。分割パックは同じファイルに追記していけば大丈夫です（重複IDは自動でスキップされます）。
-4. WORKLIST.md の該当行に `[x]` を付ける。
-5. 取込:
+4. （チェックは手で付けなくてよい。下の一括取込が自動で `[x]` を付けます。）
+
+**■ 一括で取り込む（推奨）**
+
+全パックぶんのJSONLを `data/llm_out/` に置き終えたら、**ワンコマンドで全部取り込めます**。
+ファイル名（パックと同じ名前で保存してある）から取込先を自動判定するので、`--from` を打つ必要はありません。
+
+```
+python scripts/s2_batch.py            # ドライラン: 何を取り込むか・判定不能な名前がないか確認
+python scripts/s2_batch.py --apply    # 全部取り込む + WORKLIST.md のチェックを自動更新
+python scripts/s2_batch.py --status   # llm_out の取込状況だけ見る
+```
+
+`--apply` は各ファイルに対して `s2_ingest` を呼ぶので、**逐語検証・重複除外・台帳登録・アーカイブ日付補正はそのまま効きます**。
+分割パック（`_part1`/`_part2`）は同じ配信なのでまとめて処理され、WORKLISTの該当行すべてに `[x]` が付きます。
+名前から取込先を判定できないファイルは skip され、手動コマンドが表示されます。冪等なので、途中まで取り込んだ後にもう一度 `--apply` しても重複スキップされるだけです。
+
+**■ 1つずつ取り込む（少数・デバッグ時）**
 
 ```
 python scripts/s2_ingest.py --file data/llm_out/extract_2026-07-24_fm2mzPJylCU.jsonl --from stream:fm2mzPJylCU

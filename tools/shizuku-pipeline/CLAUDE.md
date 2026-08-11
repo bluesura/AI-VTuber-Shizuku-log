@@ -52,6 +52,7 @@ python scripts/s1_normalize.py --all
 python scripts/s2_pack.py --status                 # 進捗一覧
 python scripts/s2_pack.py --all                    # 未抽出を一括生成 + data/packs/WORKLIST.md
 python scripts/s2_ingest.py --file data/llm_out/<pack名>.jsonl --from stream:<vid>|x:<YYYY-MM>
+python scripts/s2_batch.py [--apply]               # llm_out を一括取込 + WORKLISTチェック自動更新
 
 # 照合（②）→ パケット → 反映（③）
 python scripts/s3_match.py                          # 照合パック生成

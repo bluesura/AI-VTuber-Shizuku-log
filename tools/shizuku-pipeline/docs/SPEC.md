@@ -98,6 +98,7 @@ s1_normalize.py --all | --stream <vid>
 s2_pack.py     --all [--redo] | --stream <vid> | --x <YYYY-MM> | --status
                [--split N] [--max-chars 90000]
 s2_ingest.py   --file <jsonl> --from stream:<vid>|x:<YYYY-MM>
+s2_batch.py    (引数なし=ドライラン) | --apply | --status   # llm_outを一括取込・WORKLIST自動チェック
 s3_match.py    (引数なし=照合パック生成) | --ingest <judgments.jsonl> | --list-open
 s4_packet.py   [--mature-days 30]
 s5_apply.py    --packet <RV_*.md>
