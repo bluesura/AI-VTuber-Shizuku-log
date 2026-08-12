@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>しずくwiki ログ処理パイプライン — 操作マニュアル（モデルA：手動運転版）</title>
+<meta name="description" content="配信ログとXログから、人間の承認を通してだけwikiを更新するためのパイプライン操作マニュアル。">
+<style>
+/* ============================================================
+   Design tokens
+   機械=teal / Claude=violet / あなた=gold の3者色分けが全体の骨格
+   ============================================================ */
+:root{
+  --paper:#E9EEF1;
+  --paper-2:#DFE7EB;
+  --card:#FFFFFF;
+  --ink:#0F202A;
+  --ink-2:#3B5464;
+  --ink-3:#6D8493;
+  --rule:#CCD9E1;
+  --rule-soft:#E0E9EE;
+
+  --machine:#0C7A84;
+  --machine-soft:#DAEFF1;
+  --llm:#6248C4;
+  --llm-soft:#E7E2FA;
+  --human:#9E6403;
+  --human-soft:#FAECD2;
+
+  --danger:#B22F27;
+  --danger-soft:#FBE4E1;
+  --ok:#137553;
+  --ok-soft:#DAF0E7;
+
+  --code-bg:#0D1F28;
+  --code-fg:#D7E6EC;
+  --code-bd:#0A171E;
+  --code-dim:#7E9AA6;
+  --inline-bg:#E4EDF1;
+  --inline-bd:#D0DEE5;
+
+  --masthead:#0B1D26;
+  --masthead-ink:#E6F0F3;
+  --topbar-bg:rgba(233,238,241,.88);
+  --th-bg:#F1F5F7;
+  --shadow:0 1px 2px rgba(15,32,42,.05), 0 8px 24px rgba(15,32,42,.06);
+
+  --font-display:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP","Source Han Serif JP",serif;
+  --font-body:"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Noto Sans JP",Meiryo,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Noto Sans Mono","Courier New",monospace;
+}
+[data-theme="dark"]{
+  --paper:#0B161D;
+  --paper-2:#0F1E27;
+  --card:#132430;
+  --ink:#E4EDF2;
+  --ink-2:#A6BCC9;
+  --ink-3:#7A93A2;
+  --rule:#25404F;
+  --rule-soft:#1C3340;
+
+  --machine:#48C6D0;
+  --machine-soft:#0E3239;
+  --llm:#A594F7;
+  --llm-soft:#251E48;
+  --human:#E5B15B;
+  --human-soft:#382A0F;
+
+  --danger:#F18A80;
+  --danger-soft:#3C1C19;
+  --ok:#55C79A;
+  --ok-soft:#0E3129;
+
+  --code-bg:#07131A;
+  --code-fg:#CFE2EA;
+  --code-bd:#1D3543;
+  --inline-bg:#1A2E3A;
+  --inline-bd:#274051;
+
+  --masthead:#06121A;
+  --masthead-ink:#DCE9EE;
+  --topbar-bg:rgba(11,22,29,.9);
+  --th-bg:#172C38;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.28);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:84px;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--font-body);font-size:16px;line-height:1.95;
+  font-feature-settings:"palt" 1;
+  text-rendering:optimizeLegibility;
+}
+img,svg{max-width:100%}
+a{color:inherit}
+
+/* ---------- reading progress ---------- */
+#progress{
+  position:fixed;inset:0 auto auto 0;height:3px;width:0;z-index:120;
+  background:linear-gradient(90deg,var(--machine),var(--llm) 55%,var(--human));
+  transition:width .12s linear;
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:90;
+  background:var(--topbar-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--rule);
+}
+.topbar__in{
+  max-width:1240px;margin:0 auto;padding:9px 20px;
+  display:flex;align-items:center;gap:14px;
+}
+.brand{
+  display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;
+  letter-spacing:.02em;white-space:nowrap;text-decoration:none;
+}
+.brand__drop{
+  width:16px;height:20px;flex:none;
+  background:linear-gradient(160deg,var(--machine),var(--llm));
+  border-radius:50% 50% 50% 50% / 62% 62% 38% 38%;
+  transform:rotate(-8deg);
+}
+.brand small{font-weight:500;color:var(--ink-3);font-size:11.5px;letter-spacing:.06em}
+.topbar__spacer{flex:1}
+
+.search{position:relative;flex:0 1 300px;min-width:0}
+.search input{
+  width:100%;padding:8px 12px 8px 32px;font:inherit;font-size:13.5px;
+  background:var(--card);color:var(--ink);
+  border:1px solid var(--rule);border-radius:9px;outline:none;
+}
+.search input:focus{border-color:var(--machine);box-shadow:0 0 0 3px color-mix(in srgb,var(--machine) 22%,transparent)}
+.search::before{
+  content:"⌕";position:absolute;left:11px;top:50%;transform:translateY(-52%);
+  color:var(--ink-3);font-size:16px;pointer-events:none;
+}
+.search__hint{
+  position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  font-family:var(--font-mono);font-size:10.5px;color:var(--ink-3);
+  border:1px solid var(--rule);border-radius:4px;padding:0 4px;pointer-events:none;
+}
+.results{
+  position:absolute;top:calc(100% + 7px);left:0;right:0;z-index:95;
+  background:var(--card);border:1px solid var(--rule);border-radius:11px;
+  box-shadow:var(--shadow);max-height:62vh;overflow:auto;padding:5px;display:none;
+}
+.results.on{display:block}
+.results button{
+  display:block;width:100%;text-align:left;background:none;border:0;border-radius:8px;
+  padding:8px 10px;font:inherit;font-size:13px;line-height:1.6;color:var(--ink);cursor:pointer;
+}
+.results button:hover,.results button:focus-visible{background:var(--paper-2);outline:none}
+.results .r-sec{display:block;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.08em;color:var(--machine);margin-bottom:1px}
+.results .r-txt{display:block;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.results .r-none{padding:12px;color:var(--ink-3);font-size:13px}
+
+.tbtn{
+  font:inherit;font-size:12.5px;font-weight:600;line-height:1;
+  padding:8px 12px;border-radius:9px;cursor:pointer;white-space:nowrap;
+  background:var(--card);color:var(--ink-2);border:1px solid var(--rule);
+}
+.tbtn:hover{color:var(--ink);border-color:var(--ink-3)}
+.tbtn:focus-visible{outline:2px solid var(--machine);outline-offset:2px}
+.menu-btn{display:none}
+
+/* ---------- masthead ---------- */
+.masthead{
+  background:var(--masthead);color:var(--masthead-ink);
+  position:relative;overflow:hidden;border-bottom:1px solid rgba(255,255,255,.08);
+}
+.ripples{position:absolute;left:14%;top:38%;pointer-events:none;opacity:.5}
+.ripples i{
+  position:absolute;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;
+  border:1px solid rgba(120,220,230,.55);border-radius:50%;
+  animation:ripple 7.5s cubic-bezier(.2,.7,.35,1) infinite;
+}
+.ripples i:nth-child(2){animation-delay:2.5s}
+.ripples i:nth-child(3){animation-delay:5s}
+@keyframes ripple{
+  0%{transform:scale(.35);opacity:0}
+  12%{opacity:.85}
+  100%{transform:scale(16);opacity:0}
+}
+.masthead__in{max-width:1240px;margin:0 auto;padding:56px 20px 44px;position:relative}
+.eyebrow{
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:#7FC8D2;margin:0 0 14px;
+}
+.masthead h1{
+  font-family:var(--font-display);font-weight:600;line-height:1.42;
+  font-size:clamp(25px,4.1vw,42px);margin:0 0 6px;letter-spacing:.01em;
+}
+.masthead h1 .sub{display:block;font-size:.52em;color:#9FC4CE;margin-top:12px;letter-spacing:.06em}
+.lede{max-width:62ch;color:#C3D8DF;font-size:15.5px;line-height:2;margin:20px 0 0}
+.lede strong{color:#FFF;font-weight:700}
+.facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:26px}
+.fact{
+  font-size:12.5px;line-height:1;padding:8px 12px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.2);color:#D6E7EC;background:rgba(255,255,255,.05);
+}
+.fact b{color:#8FDCE6;font-weight:700}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1240px;margin:0 auto;padding:0 20px}
+.layout{display:grid;grid-template-columns:236px minmax(0,1fr);gap:52px;align-items:start;padding:44px 0 80px}
+
+/* ---------- sidebar toc ---------- */
+.toc{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;padding-right:6px}
+.toc__t{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.18em;color:var(--ink-3);margin:0 0 10px}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc a{
+  display:flex;gap:9px;align-items:baseline;text-decoration:none;color:var(--ink-2);
+  font-size:13.2px;line-height:1.5;padding:6px 8px 6px 10px;border-radius:7px;
+  border-left:2px solid transparent;
+}
+.toc a:hover{background:var(--paper-2);color:var(--ink)}
+.toc a .n{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);flex:none;width:12px}
+.toc a.on{color:var(--ink);font-weight:700;border-left-color:var(--machine);background:var(--paper-2)}
+.toc a.on .n{color:var(--machine)}
+.toc .sub a{padding-left:28px;font-size:12.6px}
+.toc__foot{margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);display:grid;gap:6px}
+
+/* ---------- sections & type ---------- */
+.sec{margin:0 0 78px;scroll-margin-top:84px}
+.sec__num{
+  font-family:var(--font-mono);font-size:11px;letter-spacing:.2em;color:var(--machine);
+  display:block;margin-bottom:8px;
+}
+h2{
+  font-family:var(--font-display);font-weight:600;letter-spacing:.015em;line-height:1.4;
+  font-size:clamp(23px,3vw,31px);margin:0 0 8px;
+}
+.sec__dek{color:var(--ink-3);font-size:14px;margin:0 0 26px;line-height:1.8}
+h3{
+  font-family:var(--font-display);font-weight:600;font-size:20px;line-height:1.55;
+  margin:44px 0 14px;padding-left:13px;border-left:3px solid var(--machine);letter-spacing:.01em;
+  scroll-margin-top:84px;
+}
+h4{font-size:15px;font-weight:700;margin:28px 0 10px;letter-spacing:.01em}
+p{margin:0 0 15px;line-height:1.98;font-size:15.3px}
+.sec ul,.sec ol{margin:0 0 16px;padding-left:1.35em}
+.sec li{margin:0 0 9px;line-height:1.94;font-size:15.1px}
+.sec li::marker{color:var(--ink-3)}
+strong{font-weight:700}
+em{font-style:normal;background:linear-gradient(transparent 62%,var(--human-soft) 62%);font-weight:600}
+hr{border:0;border-top:1px solid var(--rule);margin:44px 0}
+.lead{font-size:16px;color:var(--ink-2)}
+
+/* ---------- inline code / pre ---------- */
+code{
+  font-family:var(--font-mono);font-size:.855em;background:var(--inline-bg);
+  border:1px solid var(--inline-bd);border-radius:5px;padding:.1em .36em;
+  word-break:break-word;
+}
+.codeblock{position:relative;margin:0 0 18px}
+pre{
+  margin:0;background:var(--code-bg);color:var(--code-fg);border:1px solid var(--code-bd);
+  border-radius:12px;padding:15px 17px;overflow-x:auto;
+  font-family:var(--font-mono);font-size:12.9px;line-height:1.85;
+}
+pre code{background:none;border:0;padding:0;font-size:inherit;color:inherit}
+.codeblock__cap{
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;color:var(--ink-3);
+  margin-bottom:6px;display:block;
+}
+.copy{
+  position:absolute;top:8px;right:8px;z-index:2;
+  font:inherit;font-size:11px;font-weight:600;line-height:1;padding:6px 9px;border-radius:6px;
+  background:rgba(255,255,255,.09);color:#B9D2DB;border:1px solid rgba(255,255,255,.16);
+  cursor:pointer;opacity:0;transition:opacity .15s;
+}
+.codeblock:hover .copy,.copy:focus-visible{opacity:1}
+.copy.done{background:var(--ok);color:#fff;border-color:transparent;opacity:1}
+pre .c{color:var(--code-dim)}
+pre .k{color:#7DD3DE}
+pre .s{color:#E3B96B}
+pre .w{color:#F0A28E}
+pre .g{color:#8BD6A8}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;background:var(--card);margin:0 0 20px}
+table{width:100%;border-collapse:collapse;font-size:14.2px}
+th{
+  background:var(--th-bg);text-align:left;font-weight:700;font-size:12.5px;letter-spacing:.05em;
+  color:var(--ink-2);padding:11px 14px;border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+td{padding:12px 14px;border-bottom:1px solid var(--rule-soft);vertical-align:top;line-height:1.82}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--paper-2)}
+td code,th code{font-size:12.4px}
+.spec th{width:88px;white-space:nowrap;background:var(--th-bg);border-right:1px solid var(--rule);font-size:12.5px}
+.nowrap{white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{
+  position:relative;margin:18px 0;padding:14px 17px 14px 46px;border-radius:11px;
+  border:1px solid;font-size:14.6px;line-height:1.92;
+}
+.note::before{
+  content:attr(data-i);position:absolute;left:15px;top:13px;font-size:15px;line-height:1.4;
+  font-family:var(--font-body);
+}
+.note>:last-child{margin-bottom:0}
+.note>p{font-size:inherit;line-height:inherit}
+.note__t{display:block;font-weight:700;margin-bottom:3px}
+.note--warn{background:var(--human-soft);border-color:color-mix(in srgb,var(--human) 35%,transparent);color:var(--ink)}
+.note--warn .note__t{color:var(--human)}
+.note--stop{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.note--stop .note__t{color:var(--danger)}
+.note--check{background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+.note--check .note__t{color:var(--ok)}
+.note--info{background:var(--card);border-color:var(--rule)}
+.note--info .note__t{color:var(--machine)}
+.note--llm{background:var(--llm-soft);border-color:color-mix(in srgb,var(--llm) 32%,transparent)}
+.note--llm .note__t{color:var(--llm)}
+.note ul,.note ol{margin:8px 0 0;padding-left:1.25em}
+.note li{font-size:14.4px;margin-bottom:6px}
+
+/* ---------- do / dont ---------- */
+ul.rules{list-style:none;margin:16px 0;padding-left:0;display:grid;gap:9px}
+.rules li{
+  position:relative;padding:12px 15px 12px 44px;border-radius:10px;font-size:14.6px;
+  border:1px solid var(--rule);background:var(--card);margin:0;line-height:1.88;
+}
+.rules li::before{position:absolute;left:14px;top:11px;font-size:15px}
+.rules .do{border-color:color-mix(in srgb,var(--ok) 34%,transparent);background:var(--ok-soft)}
+.rules .do::before{content:"✅"}
+.rules .dont{border-color:color-mix(in srgb,var(--danger) 26%,transparent)}
+.rules .dont::before{content:"❌"}
+.rules .never{border-color:color-mix(in srgb,var(--danger) 46%,transparent);background:var(--danger-soft)}
+.rules .never::before{content:"⛔"}
+.rules .tip{border-style:dashed}
+.rules .tip::before{content:"◦";color:var(--ink-3);font-size:20px;top:6px}
+
+/* ---------- actor chips ---------- */
+.who{
+  display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;line-height:1;
+  padding:5px 9px;border-radius:999px;white-space:nowrap;letter-spacing:.02em;
+}
+.who--m{background:var(--machine-soft);color:var(--machine)}
+.who--l{background:var(--llm-soft);color:var(--llm)}
+.who--h{background:var(--human-soft);color:var(--human)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 22px}
+.legend .who{font-size:12px;padding:7px 12px}
+
+/* ---------- line map (signature) ---------- */
+.linemap{margin:6px 0 10px;position:relative}
+.stn{
+  position:relative;display:grid;grid-template-columns:30px minmax(0,1fr);
+  gap:16px;text-decoration:none;color:inherit;
+}
+.stn__rail{position:absolute;left:14px;top:0;bottom:0;width:3px;background:var(--c);opacity:.9}
+.stn:first-child .stn__rail{top:18px}
+.stn:last-child .stn__rail{bottom:calc(100% - 18px)}
+.stn__dot{
+  position:relative;z-index:2;grid-column:1;justify-self:center;align-self:start;
+  width:15px;height:15px;margin-top:11px;border-radius:50%;
+  background:var(--card);border:3px solid var(--c);
+}
+.stn__body{
+  grid-column:2;background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--c);
+  border-radius:10px;padding:11px 15px;margin:0 0 0 0;transition:transform .14s,box-shadow .14s;
+}
+.stn:hover .stn__body{transform:translateX(3px);box-shadow:var(--shadow)}
+.stn__h{display:flex;flex-wrap:wrap;align-items:center;gap:9px}
+.stn__h b{font-size:14.5px;letter-spacing:.01em}
+.stn__h code{font-size:12px}
+.stn__p{margin:4px 0 0;font-size:13.2px;color:var(--ink-2);line-height:1.72}
+.stn--m{--c:var(--machine)}
+.stn--l{--c:var(--llm)}
+.stn--h{--c:var(--human)}
+.pass{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr);gap:16px;min-height:34px}
+.pass__rail{position:absolute;left:14px;top:0;bottom:0;width:3px;background:linear-gradient(var(--f),var(--t))}
+.pass__f{
+  grid-column:2;align-self:center;justify-self:start;
+  font-family:var(--font-mono);font-size:11.4px;color:var(--ink-2);
+  background:var(--paper-2);border:1px dashed var(--rule);border-radius:999px;padding:3px 11px;
+}
+.pass__f::before{content:"↓ ";color:var(--ink-3)}
+.m2l{--f:var(--machine);--t:var(--llm)}
+.l2m{--f:var(--llm);--t:var(--machine)}
+.m2h{--f:var(--machine);--t:var(--human)}
+.h2m{--f:var(--human);--t:var(--machine)}
+.l2h{--f:var(--llm);--t:var(--human)}
+.m2m{--f:var(--machine);--t:var(--machine)}
+
+/* ---------- gates ---------- */
+.gates{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:11px;margin:18px 0 8px}
+.gate{
+  background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--human);
+  border-radius:11px;padding:13px 15px;
+}
+.gate .g-n{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--human);line-height:1}
+.gate .g-t{font-weight:700;font-size:14.5px;margin:7px 0 3px}
+.gate .g-w{font-size:12.3px;color:var(--ink-3);line-height:1.65}
+
+/* ---------- principle cards ---------- */
+.cards{display:grid;gap:13px;margin:18px 0}
+.cards--3{grid-template-columns:repeat(auto-fit,minmax(215px,1fr))}
+.cards--2{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.pcard{background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px 18px}
+.pcard .p-n{
+  font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;color:var(--machine);
+  display:block;margin-bottom:8px;
+}
+.pcard p{margin:0;font-size:14.4px;line-height:1.86}
+.cardt{font-size:15px;font-weight:700;margin:0 0 7px;letter-spacing:.01em}
+.pcard h4,.pcard .cardt{margin:0 0 7px;font-size:15px}
+
+/* ---------- tree ---------- */
+.tree{
+  background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:16px 18px;
+  font-family:var(--font-mono);font-size:12.9px;line-height:2.05;overflow-x:auto;margin:0 0 18px;
+  white-space:pre;                 /* 罫線ツリーは改行と空白が意味を持つ */
+  tab-size:2;
+}
+.tree .d{color:var(--machine);font-weight:700}
+.tree .cm{color:var(--ink-3)}
+.tree .git-y,.tree .git-n{
+  display:inline-block;white-space:nowrap;font-size:11px;line-height:1.5;
+  padding:0 8px;border-radius:999px;margin-left:8px;vertical-align:2px;font-weight:700;
+}
+.tree .git-y{background:var(--ok-soft);color:var(--ok)}
+.tree .git-n{background:var(--paper-2);color:var(--ink-3);font-weight:400}
+.tree b{color:var(--ink)}
+
+/* ---------- signals / numbered feature list ---------- */
+ol.numlist,ul.numlist{list-style:none;padding-left:0;margin:16px 0;display:grid;gap:10px}
+.numlist li{
+  display:grid;grid-template-columns:30px 1fr;gap:13px;margin:0;
+  background:var(--card);border:1px solid var(--rule);border-radius:11px;padding:13px 16px;
+  font-size:14.6px;line-height:1.85;
+}
+.numlist .i{
+  font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--machine);
+  background:var(--machine-soft);border-radius:7px;display:grid;place-items:center;height:24px;
+}
+
+/* ---------- packet parts A-F ---------- */
+.abcdef{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:16px 0}
+.abcdef div{
+  background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:12px 14px;font-size:13.6px;line-height:1.75;
+}
+.abcdef b{
+  display:inline-block;font-family:var(--font-mono);font-size:11px;color:#fff;background:var(--machine);
+  border-radius:5px;padding:1px 7px;margin-right:7px;
+}
+
+/* ---------- calendar ---------- */
+.cal{display:grid;gap:12px;margin:18px 0}
+.calrow{
+  display:grid;grid-template-columns:170px minmax(0,1fr);gap:18px;
+  background:var(--card);border:1px solid var(--rule);border-radius:12px;padding:15px 18px;
+}
+.calrow .freq{font-weight:700;font-size:15px}
+.calrow .time{
+  display:inline-block;margin-top:6px;font-family:var(--font-mono);font-size:11.5px;
+  color:var(--machine);background:var(--machine-soft);border-radius:999px;padding:3px 10px;
+}
+.calrow .todo{font-size:14.5px;line-height:1.9;margin:0}
+.calrow .todo .arrow{color:var(--ink-3);margin:0 4px}
+
+/* ---------- details ---------- */
+details{
+  background:var(--card);border:1px solid var(--rule);border-radius:11px;margin:0 0 10px;overflow:hidden;
+}
+details[open]{border-color:var(--ink-3)}
+summary{
+  cursor:pointer;padding:13px 16px;font-weight:700;font-size:14.6px;line-height:1.7;
+  list-style:none;display:flex;gap:11px;align-items:flex-start;
+}
+summary::-webkit-details-marker{display:none}
+summary::before{
+  content:"+";font-family:var(--font-mono);font-weight:700;color:var(--machine);flex:none;
+  width:18px;height:18px;display:grid;place-items:center;border-radius:5px;
+  background:var(--machine-soft);font-size:13px;margin-top:2px;
+}
+details[open] summary::before{content:"−"}
+summary:focus-visible{outline:2px solid var(--machine);outline-offset:-2px}
+.dbody{padding:0 16px 15px 45px}
+.dbody>:last-child{margin-bottom:0}
+.dbody p{font-size:14.6px}
+
+/* ---------- glossary tooltip ---------- */
+.gloss{
+  border-bottom:1px dashed var(--machine);cursor:help;position:relative;
+  text-decoration:none;font-weight:700;
+}
+.gloss::after{
+  content:attr(data-def);position:absolute;left:50%;bottom:calc(100% + 9px);transform:translateX(-50%);
+  width:max-content;max-width:290px;background:var(--masthead);color:#E8F2F5;
+  font-size:12.4px;font-weight:400;line-height:1.7;letter-spacing:0;
+  padding:9px 12px;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.28);
+  opacity:0;visibility:hidden;transition:opacity .14s;z-index:30;pointer-events:none;
+}
+.gloss:hover::after,.gloss.on::after,.gloss:focus-visible::after{opacity:1;visibility:visible}
+
+/* ---------- glossary list ---------- */
+.gl{display:grid;gap:0;margin:18px 0;border:1px solid var(--rule);border-radius:12px;overflow:hidden;background:var(--card)}
+.gl div{display:grid;grid-template-columns:170px minmax(0,1fr);gap:16px;padding:13px 17px;border-bottom:1px solid var(--rule-soft)}
+.gl div:last-child{border-bottom:0}
+.gl dt{font-weight:700;font-size:14.4px;color:var(--machine)}
+.gl dd{margin:0;font-size:14.4px;line-height:1.85;color:var(--ink-2)}
+
+/* ---------- cheatsheet drawer ---------- */
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(440px,92vw);z-index:110;
+  background:var(--card);border-left:1px solid var(--rule);box-shadow:-14px 0 40px rgba(0,0,0,.16);
+  transform:translateX(101%);transition:transform .26s cubic-bezier(.3,.8,.4,1);
+  display:flex;flex-direction:column;
+}
+.drawer.on{transform:none}
+.drawer__h{
+  padding:16px 18px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:12px;
+}
+.drawer__h h3{margin:0;padding:0;border:0;font-size:16px}
+.drawer__b{overflow:auto;padding:12px 18px 40px}
+.drawer__g{margin:16px 0 7px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:.14em;color:var(--machine)}
+.cmd{
+  display:flex;gap:9px;align-items:center;background:var(--code-bg);border:1px solid var(--code-bd);
+  border-radius:9px;padding:9px 11px;margin-bottom:7px;
+}
+.cmd code{
+  flex:1;background:none;border:0;padding:0;color:var(--code-fg);font-size:12.2px;
+  white-space:pre-wrap;word-break:break-all;line-height:1.6;
+}
+.cmd button{
+  flex:none;font:inherit;font-size:10.5px;font-weight:700;padding:4px 8px;border-radius:5px;cursor:pointer;
+  background:rgba(255,255,255,.1);color:#B9D2DB;border:1px solid rgba(255,255,255,.16);
+}
+.cmd button.done{background:var(--ok);color:#fff;border-color:transparent}
+.scrim{position:fixed;inset:0;background:rgba(6,18,26,.42);z-index:105;opacity:0;visibility:hidden;transition:opacity .22s}
+.scrim.on{opacity:1;visibility:visible}
+
+/* ---------- flash target ---------- */
+@keyframes flash{0%{background:var(--machine-soft)}100%{background:transparent}}
+.flash{animation:flash 1.5s ease-out}
+
+/* ---------- footer ---------- */
+.foot{
+  border-top:1px solid var(--rule);padding:30px 0 60px;color:var(--ink-3);font-size:13px;line-height:1.9;
+}
+.foot .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
+
+/* ---------- git markers (also used outside .tree) ---------- */
+.git-y{color:var(--ok);font-weight:700}
+.git-n{color:var(--ink-3)}
+
+/* ---------- X monthly bars ---------- */
+.xbars{margin:15px 0 2px;padding:13px 15px;background:var(--card);border:1px solid var(--rule);border-radius:10px}
+.xbar{display:grid;grid-template-columns:58px minmax(0,1fr) 44px;align-items:center;gap:10px;margin-bottom:6px}
+.xl{font-family:var(--font-mono);font-size:11px;color:var(--ink-3)}
+.xt{display:block;height:11px;border-radius:3px;background:linear-gradient(90deg,var(--machine),var(--llm));min-width:3px}
+.xv{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-2);text-align:right}
+.xcap{margin:9px 0 0;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+
+/* ---------- ledger loop demo ---------- */
+.loopdemo{margin:15px 0 2px}
+.ld-a{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--human);border-radius:9px;padding:10px 14px;display:grid;gap:3px}
+.ld-a.ld-close{border-left-color:var(--ok)}
+.ld-t{font-family:var(--font-mono);font-size:10.8px;color:var(--ink-3)}
+.ld-b{font-size:14px;font-weight:700;line-height:1.6}
+.ld-s{justify-self:start;font-family:var(--font-mono);font-size:10.2px;padding:2px 9px;border-radius:999px;background:var(--human-soft);color:var(--human);margin-top:2px}
+.ld-close .ld-s{background:var(--ok-soft);color:var(--ok)}
+.ld-arrow{position:relative;height:38px;margin-left:15px;padding-left:16px;font-family:var(--font-mono);font-size:11px;color:var(--ink-3);display:flex;align-items:center}
+.ld-arrow span{position:absolute;left:0;top:-2px;bottom:-2px;width:2px;background:linear-gradient(var(--human),var(--ok))}
+
+/* ---------- final flow chips ---------- */
+.finalflow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:16px 0}
+.ff{font-size:13px;font-weight:700;padding:8px 13px;border-radius:9px}
+.ff--l{background:var(--llm-soft);color:var(--llm)}
+.ff--h{background:var(--human-soft);color:var(--human)}
+.ff-a{color:var(--ink-3)}
+
+/* ---------- detectors ---------- */
+.detectors{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 22px;align-items:center}
+.detectors span{font-size:12.8px;padding:7px 12px;border-radius:8px;background:var(--machine-soft);color:var(--machine);font-weight:700}
+.detectors .det-out{background:none;color:var(--ink-2);font-weight:400}
+
+/* ---------- evidence ladder ---------- */
+.ladder{display:grid;gap:8px;margin:15px 0}
+.rung{display:grid;grid-template-columns:30px minmax(0,1fr) auto;align-items:center;gap:13px;padding:12px 15px;border-radius:10px;border:1px solid var(--rule);background:var(--card)}
+.rung--1{margin-right:20%}
+.rung--2{margin-right:10%}
+.rung--3{border-color:color-mix(in srgb,var(--ok) 42%,transparent);background:var(--ok-soft)}
+.rg{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--ink-3);text-align:center}
+.rung--3 .rg{color:var(--ok)}
+.rung b{font-size:14.6px}
+.rd{font-size:12.3px;color:var(--ink-3);text-align:right}
+
+/* ---------- git two-column ---------- */
+.gitgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px;margin:18px 0}
+.gitcol h4,.gitcol .cardt{margin:0 0 11px;font-size:14.8px}
+.gitcol--no h4,.gitcol--no .cardt{color:var(--ink-3)}
+.gitcol--yes h4,.gitcol--yes .cardt{color:var(--ok)}
+.gitcol--yes .tw{border-color:color-mix(in srgb,var(--ok) 36%,transparent)}
+
+/* ---------- traceability chain ---------- */
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:20px 0 0;padding:15px 17px;border:1px dashed var(--rule);border-radius:12px}
+.chain span{font-size:13.4px;font-weight:700;background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:6px 12px}
+.chain i{color:var(--machine);font-style:normal;font-weight:700}
+.chain em{background:none;font-size:12.4px;color:var(--ink-3);font-weight:400;margin-left:auto}
+
+/* ---------- responsive ---------- */
+@media (max-width:1000px){
+  .layout{grid-template-columns:1fr;gap:0;padding-top:28px}
+  .toc{
+    position:fixed;inset:56px 0 0 0;z-index:88;background:var(--paper);padding:20px 22px 60px;
+    max-height:none;overflow:auto;display:none;border-top:1px solid var(--rule);
+  }
+  .toc.on{display:block}
+  .menu-btn{display:inline-block}
+  .search{flex:1 1 130px}
+  .search__hint{display:none}
+}
+@media (max-width:700px){
+  body{font-size:15.5px}
+  .masthead__in{padding:38px 20px 34px}
+  .calrow{grid-template-columns:1fr;gap:8px}
+  .gl div{grid-template-columns:1fr;gap:4px}
+  .stn{grid-template-columns:24px minmax(0,1fr);gap:12px}
+  .stn__rail,.pass__rail{left:11px}
+  .brand small{display:none}
+  .desk-only{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
+@media print{
+  .topbar,.toc,.drawer,.scrim,.copy,#progress,.ripples{display:none!important}
+  body{background:#fff}
+  .layout{display:block}
+  .sec{page-break-inside:auto}
+  details{border:0}
+  details .dbody{display:block!important}
+}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<!-- ===================== TOP BAR ===================== -->
+<header class="topbar">
+  <div class="topbar__in">
+    <a class="brand" href="#top"><span class="brand__drop"></span>しずくパイプライン <small class="desk-only">モデルA / 手動運転</small></a>
+    <div class="topbar__spacer desk-only"></div>
+    <div class="search">
+      <input id="q" type="search" placeholder="本文を検索…" autocomplete="off" aria-label="本文を検索">
+      <span class="search__hint">/</span>
+      <div class="results" id="results"></div>
+    </div>
+    <button class="tbtn menu-btn" id="menuBtn" aria-expanded="false">目次</button>
+    <button class="tbtn" id="cmdBtn">⌘ コマンド一覧</button>
+    <button class="tbtn" id="themeBtn" aria-label="配色を切り替え">◐</button>
+  </div>
+</header>
+
+<!-- ===================== MASTHEAD ===================== -->
+<div class="masthead" id="top">
+  <div class="ripples" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="masthead__in">
+    <p class="eyebrow">操作マニュアル / Model A — Manual Drive</p>
+    <h1>しずくwiki ログ処理パイプライン<span class="sub">モデルA：手動運転版</span></h1>
+    <p class="lede">
+      紹介ページと年表ページを、蓄積するログ（配信の字幕 / チャット / 概要欄 / 事後コメント、Xログ）から
+      <strong>人間の承認を通してだけ</strong>更新するための道具一式です。完全自動化はしません。
+      各ステップをあなたが実行し、出力を目で確かめながら進めます。
+      このフォルダは<strong>あなたの実データ（配信4本＋Xログ2641件）を一巡処理した状態</strong>で納品されているので、
+      まず「できあがった中間物を眺めて検証する」ところから始められます。
+    </p>
+    <div class="facts">
+      <span class="fact">処理済み <b>配信4本</b></span>
+      <span class="fact">処理済み <b>Xログ2641件</b></span>
+      <span class="fact">必要なもの <b>Python 3.9+</b> のみ</span>
+      <span class="fact">追加ライブラリ <b>不要</b></span>
+      <span class="fact">Claudeを開くのは <b>3場面だけ</b></span>
+      <span class="fact">人間ゲート <b>5つ</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+<div class="layout">
+
+<!-- ===================== SIDEBAR TOC ===================== -->
+<aside class="toc" id="toc">
+  <p class="toc__t">目次</p>
+  <ol>
+    <li><a href="#overview"><span class="n">0</span>全体像</a></li>
+    <li><a href="#prep"><span class="n">1</span>準備</a></li>
+    <li><a href="#steps"><span class="n">2</span>ステップ別の手順</a>
+      <ol class="sub">
+        <li><a href="#step0">Step 0｜取り込み</a></li>
+        <li><a href="#step1">Step 1｜正規化</a></li>
+        <li><a href="#step2">Step 2｜抽出</a></li>
+        <li><a href="#step3">Step 3｜台帳照合</a></li>
+        <li><a href="#step4">Step 4｜パケット生成</a></li>
+        <li><a href="#step5">Step 5｜レビューと反映</a></li>
+      </ol>
+    </li>
+    <li><a href="#calendar"><span class="n">3</span>運用カレンダー</a></li>
+    <li><a href="#models"><span class="n">4</span>LLMモデルの選び方</a></li>
+    <li><a href="#repo"><span class="n">5</span>リポジトリ管理</a></li>
+    <li><a href="#modelb"><span class="n">6</span>モデルBへの移行</a></li>
+    <li><a href="#trouble"><span class="n">7</span>トラブルシュート</a></li>
+  </ol>
+  <div class="toc__foot">
+    <button class="tbtn" id="expandAll">すべての折りたたみを開く</button>
+  </div>
+</aside>
+
+<!-- ===================== MAIN ===================== -->
+<main>
+
+<!-- ========== 0. 全体像 ========== -->
+<section class="sec" id="overview">
+  <span class="sec__num">SECTION 0</span>
+  <h2>全体像</h2>
+  <p class="sec__dek">機械（スクリプト）→ Claude → あなた、とバトンが渡っていく1本の流れです。誰の手番かを色で追ってください。</p>
+
+  <div class="legend">
+    <span class="who who--m">🖥 手元スクリプト｜決定的処理・LLM不使用</span>
+    <span class="who who--l">🤖 Claudeチャット｜判断はここに委ねる</span>
+    <span class="who who--h">🧑 あなた｜ゲートの番人</span>
+  </div>
+
+  <div class="linemap">
+
+    <a class="stn stn--m" href="#step0"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 0</b><code>s0_intake</code></div>
+        <p class="stn__p">生ログを規定配置</p></div></a>
+    <div class="pass m2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step1"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 1</b><code>s1_normalize</code></div>
+        <p class="stn__p">文再結合・辞書・JST・シグナル検出</p></div></a>
+    <div class="pass m2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step2"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 2a</b><code>s2_pack</code></div>
+        <p class="stn__p">抽出パック生成</p></div></a>
+    <div class="pass m2l"><span class="pass__rail"></span><span class="pass__f">packs/extract_*.txt</span></div>
+
+    <a class="stn stn--l" href="#step2"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--l">🤖</span><b>抽出</b></div>
+        <p class="stn__p">パックを添付して、カードをJSONLで返させる</p></div></a>
+    <div class="pass l2m"><span class="pass__rail"></span><span class="pass__f">カードJSONLを保存</span></div>
+
+    <a class="stn stn--m" href="#step2"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 2b</b><code>s2_ingest</code></div>
+        <p class="stn__p"><span class="gloss" data-def="カード＝ログから抽出した1単位（event / quote_candidate / open_loop / capability / profile_fact / stream_note）。">カード</span>検証・取込（逐語の機械検査）</p></div></a>
+    <div class="pass m2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step3"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 3a</b><code>s3_match</code></div>
+        <p class="stn__p">台帳 × 新カードの短リスト</p></div></a>
+    <div class="pass m2l"><span class="pass__rail"></span><span class="pass__f">packs/match_*.txt</span></div>
+
+    <a class="stn stn--l" href="#step3"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--l">🤖</span><b>照合判定</b></div>
+        <p class="stn__p">ペアを添付して closed / related / unrelated を判定させる</p></div></a>
+    <div class="pass l2m"><span class="pass__rail"></span><span class="pass__f">判定JSONLを保存</span></div>
+
+    <a class="stn stn--m" href="#step3"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 3b</b><code>s3_match --ingest</code></div>
+        <p class="stn__p">判定取込 → クローズ提案</p></div></a>
+    <div class="pass m2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step4"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 4</b><code>s4_packet</code></div>
+        <p class="stn__p">レビューパケット生成</p></div></a>
+    <div class="pass m2h"><span class="pass__rail"></span><span class="pass__f">review/RV_*.md</span></div>
+
+    <a class="stn stn--h" href="#step5"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--h">🧑</span><b>パケットをレビュー</b></div>
+        <p class="stn__p">試聴 → 逐語確定 → チェック</p></div></a>
+    <div class="pass h2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step5"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b>Step 5</b><code>s5_apply</code></div>
+        <p class="stn__p">チェック結果の反映</p></div></a>
+    <div class="pass m2m"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--m" href="#step5"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--m">🖥</span><b><span class="gloss" data-def="handoff＝承認済み事項だけを、shizuku-wikiスキルの受け渡し形式に整形したもの。">handoff</span>生成</b></div>
+        <p class="stn__p">承認済み事項だけを受け渡し形式に整形</p></div></a>
+    <div class="pass m2l"><span class="pass__rail"></span><span class="pass__f">handoff_*.txt</span></div>
+
+    <a class="stn stn--l" href="#step5"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--l">🤖</span><b>wiki起草</b></div>
+        <p class="stn__p">shizuku-wikiスキル併用</p></div></a>
+    <div class="pass l2h"><span class="pass__rail"></span></div>
+
+    <a class="stn stn--h" href="#step5"><span class="stn__rail"></span><span class="stn__dot"></span>
+      <div class="stn__body"><div class="stn__h"><span class="who who--h">🧑</span><b>Fandomに差分を貼付</b></div>
+        <p class="stn__p">→ web.archive に保存</p></div></a>
+
+  </div>
+
+  <h3>テキスト版（同じ流れ）</h3>
+  <div class="codeblock">
+    <pre><code>生ログ ─Step0→ raw/ ─Step1→ normalized/(文・チャット・シグナル)
+  normalized ─Step2a→ 抽出パック ─(Claudeに添付)→ カードJSONL ─Step2b→ cards/ ＋ ledger/open
+  cards×open ─Step3a→ 照合パック ─(Claude判定)→ 判定JSONL ─Step3b→ クローズ提案
+  候補すべて ─Step4→ レビューパケット ─(あなた: 試聴・チェック)─Step5→ handoff
+  handoff ─(shizuku-wikiスキル併用チャット)→ wiki差分 ─(あなた)→ Fandom貼付</code></pre>
+  </div>
+
+  <details>
+    <summary>元のMermaidソース（原文のまま保存）</summary>
+    <div class="dbody">
+      <div class="codeblock">
+        <pre><code>flowchart TD
+  subgraph SC["🖥 手元スクリプト（決定的処理・LLM不使用）"]
+    S0["Step0 s0_intake&lt;br&gt;生ログを規定配置"] --&gt; S1["Step1 s1_normalize&lt;br&gt;文再結合・辞書・JST・シグナル検出"]
+    S1 --&gt; S2a["Step2a s2_pack&lt;br&gt;抽出パック生成"]
+    S2b["Step2b s2_ingest&lt;br&gt;カード検証・取込&lt;br&gt;（逐語の機械検査）"] --&gt; S3a["Step3a s3_match&lt;br&gt;台帳×新カード短リスト"]
+    S3b["Step3b s3_match --ingest&lt;br&gt;判定取込→クローズ提案"] --&gt; S4["Step4 s4_packet&lt;br&gt;レビューパケット生成"]
+    S5["Step5 s5_apply&lt;br&gt;チェック結果の反映"] --&gt; HF["handoff生成"]
+  end
+  subgraph CL["🤖 Claudeチャット（判断はここに委ねる）"]
+    EX["抽出&lt;br&gt;(パック添付)"]
+    MJ["照合判定&lt;br&gt;(ペア添付)"]
+    DR["wiki起草&lt;br&gt;(shizuku-wikiスキル併用)"]
+  end
+  subgraph HU["🧑 あなた（ゲートの番人）"]
+    RV["パケットをレビュー&lt;br&gt;試聴→逐語確定→チェック"]
+    FD["Fandomに差分を貼付&lt;br&gt;→ web.archive保存"]
+  end
+  S2a --&gt;|packs/extract_*.txt| EX --&gt;|カードJSONLを保存| S2b
+  S3a --&gt;|packs/match_*.txt| MJ --&gt;|判定JSONLを保存| S3b
+  S4 --&gt;|review/RV_*.md| RV --&gt; S5
+  HF --&gt;|handoff_*.txt| DR --&gt; FD</code></pre>
+      </div>
+    </div>
+  </details>
+
+  <h3>設計原則（前回の合意そのまま）</h3>
+  <div class="cards cards--3">
+    <div class="pcard"><span class="p-n">原則 01</span>
+      <h4>字幕は「索引」</h4>
+      <p>逐語はあなたの耳（t付きURLの試聴）でしか確定しない。</p></div>
+    <div class="pcard"><span class="p-n">原則 02</span>
+      <h4>拾う基準は「重要度」でなく「型」</h4>
+      <p>重要かどうかの判定は、後でリンクが成立した時まで遅延させる。</p></div>
+    <div class="pcard"><span class="p-n">原則 03</span>
+      <h4>LLMの担当は2つだけ</h4>
+      <p>LLMがやるのは「新規1単位の抽出」と「短リストの照合判定」だけ。蓄積と検索はディスクとスクリプト。</p></div>
+  </div>
+
+  <h3>5つの人間ゲート</h3>
+  <div class="gates">
+    <div class="gate"><div class="g-n">①</div><div class="g-t">逐語</div><div class="g-w">VERIFY<br>Step 5 のパケット</div></div>
+    <div class="gate"><div class="g-n">②</div><div class="g-t">公開</div><div class="g-w">ADOPT → 貼付<br>Step 5 〜 Fandom</div></div>
+    <div class="gate"><div class="g-n">③</div><div class="g-t">辞書・スキーマ変更</div><div class="g-w">config/ への追記</div></div>
+    <div class="gate"><div class="g-n">④</div><div class="g-t">ループ確定</div><div class="g-w">CLOSE<br>Step 5 のパケット</div></div>
+    <div class="gate"><div class="g-n">⑤</div><div class="g-t">月次棚卸し</div><div class="g-w">--list-open で台帳確認</div></div>
+  </div>
+</section>
+
+<!-- ========== 1. 準備 ========== -->
+<section class="sec" id="prep">
+  <span class="sec__num">SECTION 1</span>
+  <h2>準備</h2>
+  <p class="sec__dek">インストール作業はありません。必要なのはPythonと、正しいカレントディレクトリだけです。</p>
+
+  <div class="cards cards--3">
+    <div class="pcard"><span class="p-n">RUNTIME</span>
+      <p class="cardt">Python 3.9 以上だけ</p>
+      <p><strong>追加ライブラリのインストールは不要</strong>（全部標準ライブラリ）。コマンドは <code>python</code> で記載しています。環境によっては <code>py</code> や <code>python3</code> の場合があります（<code>python --version</code> で確認）。</p></div>
+    <div class="pcard"><span class="p-n">WORKING DIR</span>
+      <p class="cardt">実行はフォルダ直下で</p>
+      <p>コマンドはすべて<strong>このフォルダ直下で</strong>実行します。<br><code>cd shizuku-pipeline</code></p></div>
+    <div class="pcard"><span class="p-n">WINDOWS</span>
+      <p class="cardt">文字化けするとき</p>
+      <p>端末で <code>chcp 65001</code> を実行してください。</p></div>
+  </div>
+
+  <h3>フォルダ構成</h3>
+  <p>右端の印は「<a href="#repo">5. リポジトリ管理</a>」での扱いです。<span class="git-y" style="font-family:var(--font-mono);font-size:12px">●gitに上げる</span> は再生成できないもの、<span class="git-n" style="font-family:var(--font-mono);font-size:12px">○上げない</span> はコマンドで作り直せるものです。</p>
+  <div class="tree"><span class="d">shizuku-pipeline/</span>
+├─ <b>MANUAL.md</b>            <span class="cm">← 本書</span>
+├─ <b>DATA-ISSUES.md</b>       <span class="cm">← データ不備の対処マニュアル（doctor.pyと対）</span>
+├─ <b>README.md</b>
+├─ <span class="d">scripts/</span>             <span class="cm">← ステップ0〜5 + doctor</span>
+├─ <span class="d">prompts/</span>             <span class="cm">← Claudeに渡す指示（パックに自動同梱される）</span>
+├─ <span class="d">config/</span>              <span class="cm">← ASR補正辞書 / 語彙群 / 既知機能レジストリ</span><span class="git-y">●上げる</span>
+├─ <span class="d">examples/</span>            <span class="cm">← Claude出力の見本（形式の教材・デモ再現用）</span>
+└─ <span class="d">data/</span>
+   ├─ <span class="d">raw/</span>              <span class="cm">← 生ログ（コピー。絶対に編集しない）</span><span class="git-n">○上げない</span>
+   ├─ <span class="d">normalized/</span>       <span class="cm">← Step1の成果物（文・チャット・シグナル・X月別）</span><span class="git-n">○上げない</span>
+   ├─ <span class="d">packs/</span>            <span class="cm">← Claudeに添付するファイル（再生成可・gitに上げない）</span>
+   ├─ <span class="d">llm_out/</span>          <span class="cm">← Claudeが返したJSONLの生データ（<b>再生成不可・gitに上げる</b>）</span>
+   ├─ <span class="d">cards/</span>            <span class="cm">← カード庫（月別JSONL）</span><span class="git-y">●上げる</span>
+   ├─ <span class="d">ledger/</span>           <span class="cm">← 台帳 open/closed/クローズ提案</span><span class="git-y">●上げる</span>
+   ├─ <span class="d">review/</span>           <span class="cm">← レビューパケット・doctorレポート</span><span class="git-y">●上げる</span>
+   ├─ <span class="d">handoff/</span>          <span class="cm">← wiki起草チャットへの受け渡し</span><span class="git-y">●上げる</span>
+   └─ <span class="d">state/</span>            <span class="cm">← 処理済み管理（消すと再処理される）</span><span class="git-y">●上げる</span></div>
+
+  <h3>用語ミニ辞典</h3>
+  <dl class="gl">
+    <div><dt>Card Store（カード庫）</dt><dd><code>data/cards/YYYY-MM.jsonl</code> 群。抽出した全カードの保管場所で、DBではなくただのJSONLファイルです。図中の円柱「Card Store」はこれを指します。</dd></div>
+    <div><dt>カード</dt><dd>ログから抽出した1単位（event / quote_candidate / open_loop / capability / profile_fact / stream_note）。</dd></div>
+    <div><dt>台帳</dt><dd>未回収の伏線（目標・願望・不能表明・予告・過去参照・定型ネタ・関係マーカー）の一覧。</dd></div>
+    <div><dt>パック</dt><dd>プロンプト＋データを1ファイルにしたもの。Claudeにそのまま添付する。</dd></div>
+    <div><dt>パケット</dt><dd>あなたがチェックボックスを埋めるレビュー用Markdown。</dd></div>
+    <div><dt>handoff</dt><dd>承認済み事項だけを、shizuku-wikiスキルの受け渡し形式に整形したもの。</dd></div>
+  </dl>
+</section>
+
+<!-- ========== 2. ステップ別の手順 ========== -->
+<section class="sec" id="steps">
+  <span class="sec__num">SECTION 2</span>
+  <h2>ステップ別の手順</h2>
+  <p class="sec__dek">Step 0 → 5 を順に。決定的処理（🖥）はいつ何度流しても安全で、判断が必要な場所だけがClaude（🤖）とあなた（🧑）に渡ります。</p>
+</section>
+
+<!-- ---------- Step 0 ---------- -->
+<section class="sec" id="step0">
+  <span class="sec__num">STEP 0 <span class="who who--m" style="margin-left:8px">🖥 スクリプト</span></span>
+  <h2>取り込み</h2>
+
+  <div class="tw"><table class="spec">
+    <tr><th>目的</th><td>ログ置き場を<strong>再帰探索</strong>し、命名規則の違いを吸収して <code>data/raw/</code> にコピーする</td></tr>
+    <tr><th>コマンド</th><td><code>python scripts/s0_intake.py --src &lt;リポジトリのルート&gt;</code></td></tr>
+    <tr><th>下見</th><td><code>--dry-run</code> を付けると<strong>書き込まず</strong>に認識結果だけ表示（初回はこれを推奨）</td></tr>
+    <tr><th>出力</th><td><code>data/raw/streams/{日付}_{動画ID}/</code>（<code>info.txt</code> <code>chat.txt</code> <code>comments.txt</code> <code>sbv.txt</code>か<code>srt.txt</code> <code>origin.json</code>）、<code>data/raw/x/</code></td></tr>
+  </table></div>
+
+  <h3>フォルダ構造・ファイル名はどうあるべきか → <em>今のままで大丈夫です</em></h3>
+  <p><code>--src</code> にはリポジトリのルートを丸ごと渡してください。配下を再帰的に探し、年フォルダでも配信ごとのサブフォルダでも平置きでも同じように拾います。</p>
+
+  <div class="tree"><span class="d">AI-VTuber-Shizuku-log/</span>          <span class="cm">← ここを --src に渡す</span>
+├─ <span class="d">docs/</span>                        <span class="cm">（無視）</span>
+└─ <span class="d">logs/</span>
+   ├─ <span class="d">discord/</span>                  <span class="cm">（現状スキップ。将来の拡張ポイント）</span>
+   ├─ <span class="d">twitter(x)/</span>               <span class="cm">2023.txt 2024.txt 2025.txt 202601-05.txt → Xログとして取り込み</span>
+   └─ <span class="d">youtube/2023/, 2026/ …</span>    <span class="cm">配信フォルダは何階層でも、名前が何でも可</span></div>
+
+  <p><strong>判定は「ファイル名の形」ではなく中身</strong>でしています。具体的には:</p>
+  <div class="cards cards--2">
+    <div class="pcard"><span class="p-n">判定の根拠 01</span>
+      <p class="cardt">動画IDと日付は <code>info.txt</code> を正とする</p>
+      <p><strong>「動画ID」「投稿日」を正とする</strong>（最も信頼できるため）。フォルダ名やファイル名は補助にすぎません。だから <code>2023-01-19_(配信アーカイブ)…</code> のように<strong>フォルダ名にIDが無くても</strong>、<code>YuJ4oOGNGxg.info.txt</code> のように<strong>ファイル名にタイトルが無くても</strong>、どちらでも正しく解決されます。もし両者が食い違えば <code>info.txt</code> を採用し、<code>要確認</code> として警告します。</p></div>
+    <div class="pcard"><span class="p-n">判定の根拠 02</span>
+      <p class="cardt">種別は語尾で判定</p>
+      <p>区切り文字（<code>.</code> <code>_</code> <code>-</code>）と <code>ja</code> の有無は問いません。下表がすべて同じものとして扱われます。</p></div>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>種別</th><th>認識される書き方（例）</th></tr></thead>
+    <tbody>
+      <tr><td class="nowrap">字幕(SBV)</td><td><code>.ja.sbv.txt</code> / <code>_ja_sbv.txt</code> / <code>.sbv.txt</code> / <code>.sbv</code></td></tr>
+      <tr><td class="nowrap">字幕(SRT/VTT)</td><td><code>.ja.srt</code> / <code>.ja.srt.txt</code> / <code>_ja_srt.txt</code> / <code>.vtt</code></td></tr>
+      <tr><td class="nowrap">チャット</td><td><code>.live_chat.txt</code> / <code>_live_chat.txt</code> / <code>.chat.txt</code></td></tr>
+      <tr><td class="nowrap">概要</td><td><code>.info.txt</code> / <code>_info.txt</code></td></tr>
+      <tr><td class="nowrap">事後コメント</td><td><code>.comments.txt</code> / <code>_comments.txt</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note note--check" data-i="✓"><span class="note__t">つまり</span>
+    ご質問の <code>ファイル名.ja.sbv.txt</code> は<strong>そのままで問題ありません</strong>。<code>.compiled.md</code> や <code>.en.srt</code>（日本語以外の字幕）は自動的に無視されます。</div>
+
+  <h3>字幕はSBVでもSRTでも構いません（重要）</h3>
+  <p>過去ログには <strong><code>.ja.srt</code> しか無い回</strong>（例: 2023-01-23）や <strong><code>.ja.srt.txt</code> の回</strong>（2023-01-28）があります。
+  そのため字幕パーサをSRT/VTT対応にしてあり、SBVが無ければ自動でSRTを使います（両方あればSBV優先）。
+  YouTube自動字幕のSRTにありがちな「前のキューを丸ごと含んだまま伸びる」ローリング重複も、差分だけ残すよう処理済みです。
+  どちらを使ったかは <code>meta.json</code> の <code>subtitle_format</code> と doctor のD03所見で確認できます。</p>
+
+  <h3>Windowsのファイル名移行について → <em>戻す必要はありません。移行も止めなくて大丈夫です</em></h3>
+  <p>このツールは旧名・新名・移行途中の混在をすべて同時に受け付けます。移行はあなたのペースで進めてください。
+  新しく決めるなら、フォルダ <code>{日付}_{動画ID}</code>／ファイル <code>{動画ID}.{種別}.txt</code> の形が短く衝突しにくく扱いやすい形です（ただし<strong>必須ではありません</strong>）。</p>
+  <div class="note note--warn" data-i="⚠"><span class="note__t">パス長に注意（Windows）</span>
+    長いタイトルをフォルダ名とファイル名の両方に持つ従来形式はパスが260文字制限に触れやすいので、Windowsで
+    <code>git config --global core.longpaths true</code> を有効にしておくとcloneやcheckoutで詰まりにくくなります。</div>
+
+  <div class="note note--check" data-i="✅"><span class="note__t">検証</span>
+    まず <code>--dry-run</code> で一覧を見て、<code>[OK]</code>／<code>[不足]</code>／<code>字幕=sbv|srt</code> を確認します。実際のリポジトリ構造で検証した際の出力例:</div>
+  <div class="codeblock"><span class="codeblock__cap">--dry-run の出力例</span>
+    <pre><code><span class="g">[OK  ]</span> 2023-01-19_YuJ4oOGNGxg  字幕=sbv(srtも有→sbv優先)
+<span class="g">[OK  ]</span> 2023-01-23_Pybth-Hn9wQ  字幕=srt
+<span class="w">[不足]</span> 2023-01-28_aaTbkoBjimo  字幕=srt
+        ※不足: comments   元: 2023-01-28_【AI Vtuber_雑談配信】…
+<span class="g">[OK  ]</span> 2026-07-24_fm2mzPJylCU  字幕=sbv</code></pre></div>
+
+  <ul class="rules">
+    <li class="tip"><code>[不足]</code> は取り込み自体は行われます（あるものだけ処理されます）。恒久的に存在しない場合もあるので、止まりません。</li>
+    <li class="tip">Xログの <code>[空]</code>（中身が「なし」）は休眠期の正常な記録 → <code>DATA-ISSUES.md §6</code>。</li>
+    <li class="tip">二重コピーはされません（同一サイズならスキップ）。何度実行しても安全です。</li>
+    <li class="tip">各配信フォルダに <code>origin.json</code> が置かれ、<strong>どのファイルから作られたか</strong>を後から追跡できます。</li>
+  </ul>
+
+  <h3>データが「無い」ときの扱い（空ファイルは作らないでください）</h3>
+  <p>欠落は種別ごとに重要度が違うので、表示も分けています。</p>
+  <div class="tw"><table>
+    <thead><tr><th>種別</th><th>扱い</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td class="nowrap">字幕</td><td class="nowrap"><strong style="color:var(--danger)">ERROR</strong></td><td>無いと配信の中身が一切読めない</td></tr>
+      <tr><td class="nowrap">チャット</td><td class="nowrap"><strong style="color:var(--human)">WARN</strong></td><td>バースト・ミスマッチ検知の土台。無いと機能検知が弱る</td></tr>
+      <tr><td class="nowrap">info</td><td class="nowrap"><strong style="color:var(--human)">WARN</strong></td><td>動画IDと日付の正の情報源</td></tr>
+      <tr><td class="nowrap">コメント</td><td class="nowrap"><strong style="color:var(--machine)">INFO</strong>（<code>[OK]</code>のまま）</td><td>元動画にコメントが無いのは普通のこと。パイプラインは動く</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note note--stop" data-i="⛔"><span class="note__t">空ファイルを作るのは非推奨です</span>
+    「取得済みで0件」と「未取得」が区別できなくなり、後から取得漏れを追えなくなります。
+    代わりに、恒久的に存在しないと分かっているものだけ <code>config/known_absent.tsv</code> に理由つきで登録してください。</div>
+
+  <div class="codeblock"><span class="codeblock__cap">config/known_absent.tsv</span>
+    <pre><code><span class="c"># 動画ID	種別(comments|chat|subs)	理由</span>
+qcqC3McRRX4	chat	元ライブが保存破損。記録として配信情報のみ保持</code></pre></div>
+
+  <p>登録すると報告から消え、代わりに <code>・既知の不在: chat（known_absent.tsv に登録済み）</code> と表示されます。
+  <strong>理由がドキュメントとして残る</strong>のがこの方式の利点です。s0は末尾に貼り付け用の候補行も出力します（コメント欠落は既定でINFOなので、登録は任意です）。</p>
+
+  <h3>チャットがOCR復元のとき（<code>*.live_chat_ocr.txt</code>）</h3>
+  <p>そのままのファイル名で認識します（<code>live_chat_ocr.txt</code> / <code>_live_chat_ocr.txt</code> など）。実チャットがあればそちらを優先し、無ければOCRを使います。ただし<strong>OCRデータは扱いが変わります</strong>:</p>
+  <ol class="numlist">
+    <li><span class="i">1</span><div>パックの冒頭に「逐語引用禁止・時刻は粗い・取りこぼしあり」という注意書きが自動で入る。</div></li>
+    <li><span class="i">2</span><div>Step 2bのingestが、OCRチャットを根拠にした <code>verbatim: true</code> を<strong>機械的に却下</strong>する（誤字を逐語として引用する事故を防ぐ）。</div></li>
+    <li><span class="i">3</span><div>doctorがD12として件数と時刻粒度を報告する（実測例: 367件・粒度15秒）。件数は<strong>下限値</strong>として読んでください（画面に映っていた分しか復元できないため）。</div></li>
+  </ol>
+
+  <div class="note note--warn" data-i="⚠"><span class="note__t">ファイル名に別の動画IDを入れないでください</span>
+    例えば <code>…_zZDlC3BcQ2M_SulrjdfVDV0.live_chat_ocr.txt</code> のように2つ目のIDがあると、別配信のデータと誤認される危険があります。
+    現在は「1フォルダに <code>info.txt</code> が1つなら、そのフォルダの配信のもの」という規則で誤帰属を防ぎ、加えて <code>要確認</code> に警告を出しますが、命名は <code>{何でも}.live_chat_ocr.txt</code> に統一するのが安全です。
+    OCR元の動画を記録したい場合は、ファイル名ではなく<strong>ファイル内の先頭にコメント行</strong>として書いてください。</div>
+
+  <h3>アーカイブ再アップ（投稿日 ≠ 出来事の日）</h3>
+  <p>元配信が破損して後日アーカイブとして上げ直した場合、<strong>そのまま処理すると年表の日付が間違います</strong>。
+  <code>config/stream_relations.tsv</code> に関係を宣言してください。</p>
+  <div class="codeblock"><span class="codeblock__cap">config/stream_relations.tsv</span>
+    <pre><code><span class="c"># 動画ID	関係	相手の動画ID	備考</span>
+zZDlC3BcQ2M	archive_of	qcqC3McRRX4	元ライブ(2026-02-28)が保存破損したため再アップ</code></pre></div>
+  <p>これだけで、(1) パックに「出来事が起きた日は2026-02-28」という指示が入り、(2) ingestがカードの <code>date_jst</code> を
+  <strong>自動で元配信日に補正</strong>します（元の投稿日は <code>upload_date</code> として保持）。実測の動作:</p>
+  <div class="codeblock"><pre><code><span class="w">⚠ 1行目: アーカイブ再アップのため日付を 2026-03-03 → 2026-02-28 に補正</span></code></pre></div>
+</section>
+
+<!-- ---------- Step 1 ---------- -->
+<section class="sec" id="step1">
+  <span class="sec__num">STEP 1 <span class="who who--m" style="margin-left:8px">🖥 スクリプト</span></span>
+  <h2>正規化<span style="font-size:.5em;color:var(--ink-3);font-family:var(--font-body);font-weight:400;margin-left:10px">決定的処理。ここにLLMは入らない</span></h2>
+
+  <div class="tw"><table class="spec">
+    <tr><th>目的</th><td>字幕（SBV/SRTどちらでも）の文再結合・辞書補正、チャット整形、シグナル検出、XのUTC→JST変換</td></tr>
+    <tr><th>コマンド</th><td><code>python scripts/s1_normalize.py --all</code>（1本だけなら <code>--stream &lt;動画ID&gt;</code>）</td></tr>
+    <tr><th>出力</th><td><code>data/normalized/streams/{id}/sentences.tsv, chat.tsv, signals.json, meta.json</code>、<code>data/normalized/x/{月}.jsonl</code></td></tr>
+  </table></div>
+
+  <h3>検出するシグナル4種</h3>
+  <ol class="numlist">
+    <li><span class="i">1</span><div><strong>バースト</strong> … チャットが盛り上がった時刻（名言候補の在り処）</div></li>
+    <li><span class="i">2</span><div><strong>字幕沈黙×チャット密集</strong> … <em>非言語音イベント候補</em>。音声系の新機能は字幕に写らないので、この「影」で捕まえる</div></li>
+    <li><span class="i">3</span><div><strong>事後コメントの時刻</strong> … 視聴者による無償のハイライト注釈</div></li>
+    <li><span class="i">4</span><div><strong>概要欄の新規行</strong> … 企画・ギミックの告知（「やる気ゲージ」はこれで捕まる。字幕には0回）</div></li>
+  </ol>
+
+  <div class="note note--check" data-i="✅"><span class="note__t">検証（同梱データでの実測値。再実行して同じ数字になればOK）</span>
+    <ul>
+      <li><strong>7-24配信</strong>: <code>1199ブロック→808文</code>（<code>[sbv]</code>表示）、辞書適用99箇所。<code>sentences.tsv</code> を開き、<strong>asr列に「秋先生」が残り、norm列では「あき先生」になっている</strong>こと（asr列は原文保存、norm列だけ補正、が正しい状態）。</li>
+      <li><strong>8-02配信</strong>: ミスマッチ区間の先頭が <code>36:40〜37:20</code>（＝カラスの鳴き真似〜いびき化の実イベント。チャット爆発中に字幕29秒沈黙）。</li>
+      <li><strong>7-24の <code>signals.json</code></strong> → <code>novel_description_lines</code> に <strong>やる気ゲージの行</strong> が出ている。</li>
+      <li><strong>4-26の <code>comment_timestamps</code></strong> に <code>2:58 / 4:34 / 28:50 / 37:32</code>（事後コメント由来）。</li>
+      <li><strong>X月別</strong>: <code>2026-01:233 / 02:1148 / 03:773 / 04:396 / 05:91</code>（計2641件）。</li>
+    </ul>
+    <div class="xbars" aria-hidden="true">
+      <div class="xbar"><span class="xl">2026-01</span><span class="xt" style="width:20.3%"></span><span class="xv">233</span></div>
+      <div class="xbar"><span class="xl">02</span><span class="xt" style="width:100%"></span><span class="xv">1148</span></div>
+      <div class="xbar"><span class="xl">03</span><span class="xt" style="width:67.3%"></span><span class="xv">773</span></div>
+      <div class="xbar"><span class="xl">04</span><span class="xt" style="width:34.5%"></span><span class="xv">396</span></div>
+      <div class="xbar"><span class="xl">05</span><span class="xt" style="width:7.9%"></span><span class="xv">91</span></div>
+      <p class="xcap">Xログの月別件数（合計 2641件）</p>
+    </div>
+  </div>
+
+  <div class="note note--warn" data-i="⚠"><span class="note__t">つまずき</span>
+    概要欄の「新規行」検出は<strong>日付順に処理した時だけ</strong>正しく育ちます。最初の1本は基準線扱い（新規行なし）。</div>
+</section>
+
+<!-- ---------- Step 2 ---------- -->
+<section class="sec" id="step2">
+  <span class="sec__num">STEP 2 <span class="who who--m" style="margin-left:8px">🖥</span> <span class="who who--l">🤖 Claude</span></span>
+  <h2>抽出<span style="font-size:.5em;color:var(--ink-3);font-family:var(--font-body);font-weight:400;margin-left:10px">Claudeに委ねる唯一の「読む」工程</span></h2>
+
+  <h3>2a. <span class="gloss" data-def="パック＝プロンプト＋データを1ファイルにしたもの。Claudeにそのまま添付する。">パック</span>生成 <span class="who who--m">🖥</span></h3>
+  <p>1本ずつでも、まとめてでも作れます。まとめて作っても<strong>Claudeに渡すのは1つずつ</strong>です（理由は2b）。</p>
+  <div class="codeblock"><pre><code>python scripts/s2_pack.py --status                 <span class="c"># 進捗一覧（済/未・カード枚数）</span>
+python scripts/s2_pack.py --all                    <span class="c"># 未抽出のもの全部を一括生成 ＋ 作業リスト作成</span>
+python scripts/s2_pack.py --stream &lt;動画ID&gt;         <span class="c"># 1本だけ</span>
+python scripts/s2_pack.py --x 2026-02              <span class="c"># Xログ1ヶ月だけ</span>
+python scripts/s2_pack.py --all --redo             <span class="c"># 抽出済みも作り直す</span>
+python scripts/s2_pack.py --all --max-chars 60000  <span class="c"># 分割をもっと細かく</span></code></pre></div>
+
+  <p><code>--all</code> は <strong>未抽出のものだけ</strong>を日付順に生成し、<code>data/packs/WORKLIST.md</code>（チェックボックス付きの作業リスト）を作ります。
+  1パックが <code>--max-chars</code>（既定9万文字）を超えると<strong>自動で分割</strong>されます。実測の生成例:</p>
+  <div class="codeblock"><span class="codeblock__cap">生成例</span>
+    <pre><code>2026-04-26   66,692文字  extract_2026-04-26_BU-BxUkGjc4.txt
+2026-08-02   67,327文字 <span class="k">part1/2</span>  extract_2026-08-02_G1kp2SXuFc4_part1.txt
+2026-08-02   69,767文字 <span class="k">part2/2</span>  extract_2026-08-02_G1kp2SXuFc4_part2.txt
+2026-03      54,707文字 <span class="k">part1/4</span>  extract_x_2026-03_part1.txt</code></pre></div>
+
+  <div class="note note--info" data-i="◈"><span class="note__t">パックの中身</span>
+    抽出プロンプト（<code>prompts/extract_stream.md</code> / <code>extract_x.md</code>）＋配信固有の注意＋シグナル＋タイムライン
+    （<code>[S 時刻] しずく発話</code> と <code>[C 時刻 ID] チャット原文</code> の時系列統合）。</div>
+
+  <div class="note note--warn" data-i="⚠"><span class="note__t">一括生成しても、抽出作業まで一気にやろうとしないでください</span>
+    96本を最初から全部やるのは非現実的です。まず<strong>既存wikiに記述がある2026年の数本</strong>から始めて、抽出結果と既存wikiを突き合わせる（バックテスト）。
+    プロンプトの精度を確かめてから過去へ遡るほうが、やり直しが少なくて済みます。</div>
+
+  <h3>2b. Claudeチャットで抽出 — <em>1配信＝1チャットが正しいやり方です</em> <span class="who who--l">🤖</span></h3>
+  <p>（同じ配信が <code>_partN</code> に分かれている場合だけは、その配信の全partを<strong>同じ1つのチャット</strong>で順番に処理します。別配信は必ず別チャット。詳細は下の「分割パック（part）の渡し方」。）</p>
+  <p>理由は好みではなく、実測に基づく制約です。</p>
+  <ol class="numlist">
+    <li><span class="i">1</span><div><strong>文脈量</strong>: 2時間配信のパックは6.6万〜13.2万文字。日本語はおおむね1文字≒1トークンなので、<strong>長い配信を2本入れると入りきりません</strong>。入っても出力に使える余地が消えます。</div></li>
+    <li><span class="i">2</span><div><strong>取り違え</strong>: 同じチャットに複数配信があると、動画ID・日付・秒数が混ざったカードが出ます。ingestは <code>--from</code> で動画IDを強制補正しますが、<strong>秒数と根拠チャットまでは直せません</strong>（＝誤った試聴リンクが残る）。</div></li>
+    <li><span class="i">3</span><div><strong>やり直しの局所化</strong>: 出力が壊れたとき、作り直すのが1本で済みます。</div></li>
+    <li><span class="i">4</span><div><strong>注意の希釈</strong>: 「バーストの根拠を挙げる」「逐語を復元しない」といった細かい指示は、対象が1本のときに最もよく守られます。</div></li>
+  </ol>
+
+  <h4>手順</h4>
+  <ol>
+    <li><strong>新しいClaudeチャット</strong>を開く（スキル不要。パックに指示が全部入っています）。どのモデル・思考設定を使うかは「<a href="#models">4. LLMモデルの選び方</a>」を参照。
+      <div class="note note--llm" data-i="🤖" style="margin-top:12px"><span class="note__t">分割パック（part）の渡し方 — 重要</span>
+        <code>_part1</code> <code>_part2</code> … に分かれているのは、配信の中身が別だからではなく、<strong>1本が長すぎて1チャットに収まらないので機械的に切っただけ</strong>です。part同士は同じ配信の前半・後半で、時系列が地続きです。だから:
+        <ul class="rules" style="margin-top:12px">
+          <li class="do"><strong>同じチャットで、1つずつ順番に渡す。</strong> まず part1 を貼って抽出→JSONLを受け取り、<strong>同じチャットのまま</strong> part2 を貼って「続きです。前半の文脈を踏まえて抽出して」と送る。こうすると前半の内容が履歴に残り、掛け合いの片側だけが別partにある名言や、前半で開いた伏線が後半で回収される流れを、モデルが繋げられます。</li>
+          <li class="dont"><strong>全partを1メッセージにまとめて貼らない。</strong> 分割した意味が消え、元の入りきらないサイズに戻ります（入っても中盤の取りこぼしが増える）。</li>
+          <li class="dont"><strong>partごとに別チャットに分けない。</strong> 後半チャットから前半の文脈が見えず、判断が分断されます。</li>
+          <li class="never"><strong>別配信を同じチャットに混ぜない。</strong> part分割（同一配信）は同じチャット、別配信は別チャット。混ぜると動画ID・秒数が混ざったカードが出て試聴リンクがずれます。</li>
+          <li class="tip">保存は <strong>partごとに別ファイル</strong>（<code>extract_..._part1.jsonl</code> / <code>_part2.jsonl</code>）でよい。取込先(<code>--from</code>)が同じなので <code>s2_batch --apply</code> がまとめて取り込み、WORKLISTの両行にチェックが付きます。</li>
+          <li class="tip">partが5つも6つもできる配信は、1本が極端に長いということ。<code>--max-chars</code> をむしろ<strong>上げて</strong>part数を減らすとチャットの往復が減って楽になることがあります（「同じチャットで順番に」の原則は変わりません）。</li>
+        </ul>
+      </div>
+    </li>
+    <li><code>data/packs/extract_*.txt</code> を<strong>添付</strong>し、「このファイルの指示に従ってカードを抽出して」と送る。</li>
+    <li>返ってきたJSONLを <strong>添付したパックと同じ名前で拡張子だけ .jsonl</strong> にして <code>data/llm_out/</code> に保存（例: <code>extract_2026-05-31_KMKfe71ZnhI.txt</code> → <code>data/llm_out/extract_2026-05-31_KMKfe71ZnhI.jsonl</code>）。名前がずれても <code>s2_ingest</code> が <code>--from</code> のIDから探すので致命的ではありませんが、揃えるのが安全です。分割パックは同じファイルに追記していけば大丈夫です（重複IDは自動でスキップされます）。</li>
+    <li>（チェックは手で付けなくてよい。下の一括取込が自動で <code>[x]</code> を付けます。）</li>
+  </ol>
+
+  <h4>■ 一括で取り込む（推奨） <span class="who who--m">🖥</span></h4>
+  <p>全パックぶんのJSONLを <code>data/llm_out/</code> に置き終えたら、<strong>ワンコマンドで全部取り込めます</strong>。
+  ファイル名（パックと同じ名前で保存してある）から取込先を自動判定するので、<code>--from</code> を打つ必要はありません。</p>
+  <div class="codeblock"><pre><code>python scripts/s2_batch.py            <span class="c"># ドライラン: 何を取り込むか・判定不能な名前がないか確認</span>
+python scripts/s2_batch.py --apply    <span class="c"># 全部取り込む + WORKLIST.md のチェックを自動更新</span>
+python scripts/s2_batch.py --status   <span class="c"># llm_out の取込状況だけ見る</span></code></pre></div>
+  <p><code>--apply</code> は各ファイルに対して <code>s2_ingest</code> を呼ぶので、<strong>逐語検証・重複除外・台帳登録・アーカイブ日付補正はそのまま効きます</strong>。
+  分割パック（<code>_part1</code>/<code>_part2</code>）は同じ配信なのでまとめて処理され、WORKLISTの該当行すべてに <code>[x]</code> が付きます。
+  名前から取込先を判定できないファイルは skip され、手動コマンドが表示されます。冪等なので、途中まで取り込んだ後にもう一度 <code>--apply</code> しても重複スキップされるだけです。</p>
+
+  <h4>■ 1つずつ取り込む（少数・デバッグ時）</h4>
+  <div class="codeblock"><pre><code>python scripts/s2_ingest.py --file data/llm_out/extract_2026-07-24_fm2mzPJylCU.jsonl --from stream:fm2mzPJylCU
+python scripts/s2_ingest.py --file data/llm_out/extract_x_2026-02.jsonl --from x:2026-02</code></pre></div>
+
+  <div class="note note--info" data-i="🔒"><span class="note__t">ingestは黙って信用しません（ここが逐語ゲートの前段）</span>
+    <ul>
+      <li>字幕由来のカードは <code>verbatim</code> を<strong>強制的にfalse</strong>（逐語はStep5の試聴でのみ確定）。</li>
+      <li>チャット/X由来の引用は<strong>原文と照合</strong>し、一致しなければfalseに落として警告。OCR復元チャットは<strong>常に</strong>逐語不可。</li>
+      <li>open_loopは <code>expected_signal</code>（回収条件）が無ければ破棄。重複IDはスキップ。</li>
+      <li>アーカイブ再アップの配信は、カードの日付を元配信日へ自動補正。</li>
+    </ul>
+  </div>
+
+  <div class="note note--check" data-i="✅"><span class="note__t">検証</span>
+    まず本物のClaude出力の代わりに見本で流れを確認できます:
+    <div class="codeblock" style="margin:10px 0 0"><pre><code>python scripts/s2_ingest.py --file examples/sample_cards_stream_0724.jsonl --from stream:fm2mzPJylCU</code></pre></div>
+    <p style="margin-top:10px">→ <code>取込: 7枚 … 台帳open登録: 4件</code> になれば正常（同梱データでは取込済みなので「重複スキップ」の警告が出る＝それも正しい動作）。
+    本番では警告行（⚠）を読み、破棄が多い場合はClaudeの出力形式を確認してください。</p>
+  </div>
+</section>
+
+<!-- ---------- Step 3 ---------- -->
+<section class="sec" id="step3">
+  <span class="sec__num">STEP 3 <span class="who who--m" style="margin-left:8px">🖥</span> <span class="who who--l">🤖 Claude</span></span>
+  <h2><span class="gloss" data-def="台帳＝未回収の伏線（目標・願望・不能表明・予告・過去参照・定型ネタ・関係マーカー）の一覧。">台帳</span>照合</h2>
+
+  <div class="codeblock"><pre><code>python scripts/s3_match.py                <span class="c"># 短リスト生成（新カード×未回収台帳、語彙の重なりで前絞り）</span>
+<span class="k">→ packs/match_*.txt をClaudeに添付（小型モデル＋思考オンで十分／§4）→ 判定JSONLを data/llm_out/ に保存 →</span>
+python scripts/s3_match.py --ingest &lt;判定ファイル&gt;
+python scripts/s3_match.py --list-open    <span class="c"># いつでも: 未回収一覧</span></code></pre></div>
+
+  <div class="note note--info" data-i="⚡"><span class="note__t">計算量は常に「新規×open」だけ</span>
+    全履歴を舐める工程は存在しません。</div>
+
+  <h3>処理順について</h3>
+  <p><code>s2_pack --all</code> が作る WORKLIST.md は<strong>日付の古い順</strong>に並んでいるので、上から順に処理すれば自然と「ループが開く → あとで閉じる」の順になります。
+  ただし照合は<strong>ペア単位</strong>で記録するよう作ってあるので、順番が前後しても回収は取りこぼしません（先に閉じるカードを入れ、あとからループが開いても、次の <code>s3_match</code> でちゃんとペアが出ます）。
+  つまり<strong>古い順が理想だが、厳密でなくてよい</strong>。過去ログをまとめて入れてから照合しても同じ結果になります。</p>
+
+  <div class="note note--warn" data-i="🚦"><span class="note__t">判定はスクリプトが下さない</span>
+    <code>closed</code> は<strong>クローズ提案</strong>になるだけで、確定はStep5のあなた（ゲート4）。</div>
+
+  <div class="note note--check" data-i="✅"><span class="note__t">検証（同梱デモ）</span>
+    <code>data/ledger/closed.jsonl</code> に実例が1件入っています —
+    <strong>X 2026-02-28「ギャルボイスモデルも開発してください」→ 2026-05-24 ギャル配信で回収</strong>。
+    台帳が実データで機能した生きた証拠です（<code>examples/sample_judgments.jsonl</code> が判定見本）。
+    <div class="loopdemo">
+      <div class="ld-a"><span class="ld-t">2026-02-28 ・ X</span><span class="ld-b">「ギャルボイスモデルも開発してください」</span><span class="ld-s">open</span></div>
+      <div class="ld-arrow">回収まで 86日<span></span></div>
+      <div class="ld-a ld-close"><span class="ld-t">2026-05-24 ・ 配信</span><span class="ld-b">ギャル配信で回収</span><span class="ld-s">closed</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ---------- Step 4 ---------- -->
+<section class="sec" id="step4">
+  <span class="sec__num">STEP 4 <span class="who who--m" style="margin-left:8px">🖥 スクリプト</span></span>
+  <h2>レビュー<span class="gloss" data-def="パケット＝あなたがチェックボックスを埋めるレビュー用Markdown。">パケット</span>生成</h2>
+
+  <div class="codeblock"><pre><code>python scripts/s4_packet.py                  <span class="c"># 既定: 名言候補は「30日熟成」後に登場（月次選考の思想）</span>
+python scripts/s4_packet.py --mature-days 0  <span class="c"># 即時に全部見たいとき</span></code></pre></div>
+
+  <p>出力 <code>data/review/RV_*.md</code> の中身:</p>
+  <div class="abcdef">
+    <div><b>A</b>年表候補（wiki書式の行案＋ref込み）</div>
+    <div><b>B</b>名言候補（試聴リンク・ASR・逐語記入欄・チャット反応）</div>
+    <div><b>C</b>機能候補</div>
+    <div><b>D</b>台帳（新規openの確認・クローズ提案）</div>
+    <div><b>E</b>紹介ページ供給</div>
+    <div><b>F</b>シグナル参考</div>
+  </div>
+</section>
+
+<!-- ---------- Step 5 ---------- -->
+<section class="sec" id="step5">
+  <span class="sec__num">STEP 5 <span class="who who--h" style="margin-left:8px">🧑 あなたの工程</span></span>
+  <h2>レビューと反映</h2>
+  <p class="sec__dek">ここが品質の源泉です。5つの人間ゲートのうち①②④がこの画面にあります。</p>
+
+  <p>パケットをエディタで開き:</p>
+  <ol class="numlist">
+    <li><span class="i">1</span><div><strong>名言</strong> … 試聴リンクを開いて数十秒聴く → <code>逐語:</code> 行を正確に書き直す → <code>VERIFY</code> に <code>[x]</code> → 採用なら <code>ADOPT</code> にも <code>[x]</code>。</div></li>
+    <li><span class="i">2</span><div><strong>年表・機能・供給</strong> … 出典リンクで発言を確認 → <code>ADOPT</code> か <code>DROP</code>。</div></li>
+    <li><span class="i">3</span><div><strong>台帳</strong> … 新規openは <code>KEEP</code>/<code>DROP</code>、クローズ提案は成立していれば <code>CLOSE</code> に <code>[x]</code>。</div></li>
+    <li><span class="i">4</span><div><strong>未チェック＝保留</strong>。消えません。次回パケットにまた出ます（安心して途中でやめてよい）。</div></li>
+  </ol>
+
+  <div class="codeblock"><pre><code>python scripts/s5_apply.py --packet data/review/RV_20260808-01.md</code></pre></div>
+
+  <div class="note note--info" data-i="↩"><span class="note__t">反映されるもの</span>
+    カード状態（verified / approved / rejected）、台帳（open→closed移動）、
+    そして <code>data/handoff/handoff_*.txt</code> — <strong>shizuku-wikiスキルの受け渡し形式そのまま</strong>
+    （年表=【日付】【出来事の概要】【ソースURL】の3行形式、名言=逐語＋出典、回収成立=括弧書き追補の材料）。</div>
+
+  <div class="note note--check" data-i="✅"><span class="note__t">検証（同梱デモの状態にはゲートの実演が含まれています）</span>
+    <ul>
+      <li><code>handoff_RV_20260808-01.txt</code> に年表1行（ギャル配信）と回収成立1件が入っている。</li>
+      <li><strong>名言「しずくはメンヘラではありません」はhandoffに入っていない</strong> — 逐語未確定（VERIFY未チェック）だから。
+        これが正しい動作です。試聴はあなたにしかできないので、デモではあえて未確定のまま残してあります。
+        試すには: パケットの <code>逐語:</code> 行を書き直し <code>VERIFY</code>/<code>ADOPT</code> に <code>[x]</code> → もう一度 s5_apply。</li>
+    </ul>
+  </div>
+
+  <h3>最後の工程（wikiへ） <span class="who who--l">🤖</span> <span class="who who--h">🧑</span></h3>
+  <p><code>prompts/draft_wiki.md</code> の手順どおり、shizuku-wikiスキルを有効化したチャットに「対象ページの現ソース＋handoffの該当ブロック」を渡して差分を作らせ、
+  目視 → Fandomに貼付 → 出典URLを web.archive.org に保存。</p>
+  <div class="finalflow">
+    <span class="ff ff--l">🤖 差分を起草</span><span class="ff-a">→</span>
+    <span class="ff ff--h">🧑 目視</span><span class="ff-a">→</span>
+    <span class="ff ff--h">🧑 Fandomに貼付</span><span class="ff-a">→</span>
+    <span class="ff ff--h">🧑 web.archive.org に保存</span>
+  </div>
+</section>
+
+<!-- ========== 3. 運用カレンダー ========== -->
+<section class="sec" id="calendar">
+  <span class="sec__num">SECTION 3</span>
+  <h2>運用カレンダー</h2>
+  <p class="sec__dek">「配信ごと15分・週次10分・月次30分」。この頻度で回すことを前提に設計されています。</p>
+
+  <div class="cal">
+    <div class="calrow">
+      <div><div class="freq">配信ごと</div><span class="time">15分</span></div>
+      <p class="todo">ログ取得 <span class="arrow">→</span> <a href="#step0">Step0</a> <span class="arrow">→</span> <a href="#step1">Step1</a> <span class="arrow">→</span> <a href="#step2">Step2</a>（パック→Claude→ingest）</p>
+    </div>
+    <div class="calrow">
+      <div><div class="freq">週次</div><span class="time">10分</span></div>
+      <p class="todo"><a href="#step3">Step3</a> <span class="arrow">→</span> <a href="#step4">Step4</a> <span class="arrow">→</span> パケット消化（試聴・チェック）<span class="arrow">→</span> <a href="#step5">Step5</a> <span class="arrow">→</span> 年表・機能ぶんをwiki起草へ</p>
+    </div>
+    <div class="calrow">
+      <div><div class="freq">月次</div><span class="time">30分</span></div>
+      <p class="todo"><code>--mature-days 30</code> で名言選考 / <code>s3_match.py --list-open</code> で台帳棚卸し（ゲート5）/ <code>doctor.py</code> 実行 / X月次パック処理</p>
+    </div>
+    <div class="calrow">
+      <div><div class="freq">四半期</div><span class="time">—</span></div>
+      <p class="todo"><code>config/features_registry.tsv</code> 更新（採用済みcapabilityを転記）/ 辞書見直し / 紹介ページ大節の加筆</p>
+    </div>
+  </div>
+
+  <h3>機能・スペック検知はこの工程に内蔵されています</h3>
+  <p>検知器5種（概要欄テンプレ差分・新規性語彙×バースト・字幕沈黙×チャット密集・事後コメント時刻・X告知突合）→ capabilityカード → レジストリ突合。</p>
+  <div class="detectors">
+    <span>概要欄テンプレ差分</span><span>新規性語彙×バースト</span><span>字幕沈黙×チャット密集</span><span>事後コメント時刻</span><span>X告知突合</span>
+    <span class="det-out">→ capabilityカード → レジストリ突合</span>
+  </div>
+
+  <h4>初披露の主張は3段階で強度管理</h4>
+  <div class="ladder">
+    <div class="rung rung--1"><span class="rg">弱</span><b>コーパス内初観測</b><span class="rd">機械</span></div>
+    <div class="rung rung--2"><span class="rg">中</span><b>初見驚愕型の反応</b><span class="rd">傍証</span></div>
+    <div class="rung rung--3"><span class="rg">強</span><b>告知・明言の出典</b><span class="rd">これがある時だけwikiで「初披露」</span></div>
+  </div>
+  <div class="note note--warn" data-i="✎"><span class="note__t">出典が無いときの書き方</span>
+    「初披露」とは書かず、<strong>「遅くとも◯月◯日の配信で確認できる」</strong>と書く。</div>
+</section>
+
+<!-- ========== 4. LLMモデルの選び方 ========== -->
+<section class="sec" id="models">
+  <span class="sec__num">SECTION 4</span>
+  <h2>LLMモデルの選び方<span style="font-size:.5em;color:var(--ink-3);font-family:var(--font-body);font-weight:400;margin-left:10px">Claudeのチャットを開く3つの場面</span></h2>
+
+  <div class="note note--llm" data-i="💡"><span class="note__t">迷ったら全部いちばん強いモデル（Claude Opus 5）で構いません。</span>
+    理由は後述しますが、この運用では上位モデルの追加コストが実質ゼロだからです。以下は「もっと詰めたい人向け」の内訳です。</div>
+
+  <h3>この工程でClaudeのチャットを開くのは3回だけです</h3>
+  <p>「<a href="#overview">0. 全体像</a>」の図で 🤖 と書かれている3つの箱が、そのままこの3つです。</p>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>場面</th><th>チャットに添付するもの</th><th>Claudeにやらせること</th><th>推奨モデル</th><th>思考</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>①</strong></td>
+        <td class="nowrap"><strong><a href="#step2">Step 2b 抽出</a></strong></td>
+        <td><code>data/packs/extract_*.txt</code></td>
+        <td>配信/Xログからカードを抽出しJSONLで返す</td>
+        <td><strong>Opus 5</strong><br>（余裕がなければ Sonnet 5）</td>
+        <td class="nowrap">中</td>
+      </tr>
+      <tr>
+        <td><strong>②</strong></td>
+        <td class="nowrap"><strong><a href="#step3">Step 3 照合判定</a></strong></td>
+        <td><code>data/packs/match_*.txt</code></td>
+        <td>台帳ループと新カードのペアを closed / related / unrelated で判定</td>
+        <td><strong>Haiku 4.5 か Sonnet 5</strong></td>
+        <td class="nowrap">オン</td>
+      </tr>
+      <tr>
+        <td><strong>③</strong></td>
+        <td class="nowrap"><strong><a href="#step5">wiki起草</a></strong></td>
+        <td><code>data/handoff/handoff_*.txt</code> ＋ 対象ページの現ソース（＋<code>shizuku-wiki.skill</code> を有効化）</td>
+        <td>年表・名言・機能の<strong>差分</strong>を書式どおりに起草</td>
+        <td><strong>Sonnet 5</strong><br>（書式が崩れるなら Opus 5）</td>
+        <td class="nowrap">中</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <p>①だけが重い工程です。②はごく短い入力の判断で、しかも後ろに人間ゲート（パケットのCLOSE確認）があるので小型で十分。
+  ③は書式遵守が主で、出てきた差分をあなたが目視してから貼るので中位で足ります。</p>
+
+  <h3>①が難しい理由 —「網羅」と「我慢」</h3>
+  <p>深い推論ではありません。6〜9万文字の中盤を落とさずに拾いつつ、<code>[?]をしまして</code> のような崩れたASRを
+  <strong>"親切に"補完しない</strong>ことが求められます。この我慢が効かないモデルは、もっともらしい逐語を作ります。
+  下位モデルで最初に壊れるのはここです。思考エフォートを上げすぎると、むしろ「気を利かせて復元する」失敗が増える傾向があるので中程度で十分です
+  （例外は非言語音の検知。チャットの盛り上がりとASRの不在を突き合わせる部分は少し推論が要ります）。</p>
+
+  <h3>「校正期」と「量産」＝ ①をどう進めるかの時期の話</h3>
+  <p>これは工程の名前ではなく、<strong>①（抽出）を何本こなしたかという段階</strong>を指します。</p>
+  <div class="cards cards--2">
+    <div class="pcard" style="border-top:3px solid var(--llm)"><span class="p-n" style="color:var(--llm)">PHASE 1 — 校正期</span>
+      <p class="cardt">最初の3〜5パック</p>
+      <p>既存wikiに記述がある2026年の配信を選び、抽出結果とwikiを突き合わせる（バックテスト）。
+      プロンプトが効いているかを確かめる期間なので、<strong>必ず最上位モデル</strong>を使ってください。
+      ここでの取りこぼしは「モデルのせい」か「プロンプトのせい」か区別がつかなくなります。</p></div>
+    <div class="pcard" style="border-top:3px solid var(--machine)"><span class="p-n">PHASE 2 — 量産</span>
+      <p class="cardt">校正が済んだあとの残り全部</p>
+      <p>過去ログ96本など。ここで初めて中位モデルへ落とす選択肢が出てきます。</p></div>
+  </div>
+  <div class="note note--check" data-i="🎯"><span class="note__t">切り替えの目安</span>
+    校正期の3〜5本で <code>s2_ingest</code> の ⚠（逐語違反・スキーマ破棄・日付補正）が数件以内に収まり、
+    既存wikiの出来事を取りこぼさなくなったら、プロンプトは効いていると判断してよいです。</div>
+
+  <h3>ただし、いまのあなたの運用ではコストが問題になりません</h3>
+  <p>①はチャットUIでの手作業なので、上位モデルを使う追加コストは実質ゼロ。支配的なコストは<strong>パック数ぶんのあなたの時間</strong>です。
+  1パックあたり数分の手直しが減るほうが料金差より大きいので、<strong>量産期も含めてOpus 5のままで構いません</strong>。
+  中位・小型モデルの検討が意味を持つのは、モデルB（API自動化）に移って100本以上を機械的に流すときです。
+  下位モデルを使う場合は <code>--max-chars</code> を4〜5万に下げて分割を細かくしてください（文脈長が長くても、中盤の取りこぼしは別問題です）。</p>
+
+  <h3>他社モデルを使う場合の対応表（2026年8月時点）</h3>
+  <p>ラインナップは頻繁に変わるので、<strong>階層</strong>で読み替えてください。</p>
+  <div class="tw"><table>
+    <thead><tr><th>階層</th><th>Claude</th><th>OpenAI</th><th>Gemini</th><th>オープンウェイト</th></tr></thead>
+    <tbody>
+      <tr><td class="nowrap"><strong>最上位</strong><br><span style="color:var(--ink-3);font-size:12.5px">①校正期</span></td><td>Opus 5</td><td>GPT-5.6 Sol</td><td>3.1 Pro</td><td>Kimi K3</td></tr>
+      <tr><td class="nowrap"><strong>中位</strong><br><span style="color:var(--ink-3);font-size:12.5px">①量産・③起草</span></td><td>Sonnet 5</td><td>GPT-5.6 Terra</td><td>3.1 Pro/Flash 相当</td><td>DeepSeek / GLM / Qwen 上位</td></tr>
+      <tr><td class="nowrap"><strong>小型</strong><br><span style="color:var(--ink-3);font-size:12.5px">②照合</span></td><td>Haiku 4.5</td><td>GPT-5.6 Luna</td><td>Flash 系</td><td>同上の小型版</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note note--info" data-i="🔐"><span class="note__t">オープンウェイトを選ぶ利点＝ローカル実行</span>
+    オープンウェイトを選ぶ利点はこの工程では明確で、<strong>ローカル実行できる</strong>ことです。パックには匿名化済みとはいえ視聴者チャットが丸ごと入るので、外部に出さずに処理できるのは実質的な利点になります。
+    ただし配信文化・ネタ・敬語の機微はベンチマーク点では測れないので、必ず下記で確かめてください。</div>
+
+  <h3>モデル選定は感覚でなく実測で決められます</h3>
+  <p>既存wikiの2026年分が正解データになります。同じパックを候補モデルに投げ、<code>s2_ingest</code> の出力をそのまま採点表として読みます。</p>
+  <ol class="numlist">
+    <li><span class="i">1</span><div><strong>⚠の件数</strong> — 逐語違反・スキーマ破棄・日付補正の回数（少ないほど指示追従が良い）</div></li>
+    <li><span class="i">2</span><div><strong>再現率</strong> — 既存wikiに載っている出来事・名言を拾えたか</div></li>
+    <li><span class="i">3</span><div><strong>誤検出</strong> — 出典を確認したら事実と違うカードが何枚あったか</div></li>
+  </ol>
+  <p>3本も回せば序列が見えます。結果が出たらこの節を実測値で書き換えてください。</p>
+</section>
+
+<!-- ========== 5. リポジトリ管理 ========== -->
+<section class="sec" id="repo">
+  <span class="sec__num">SECTION 5</span>
+  <h2>リポジトリ管理<span style="font-size:.5em;color:var(--ink-3);font-family:var(--font-body);font-weight:400;margin-left:10px">何をgitに上げるか</span></h2>
+
+  <div class="note note--info" data-i="⚖"><span class="note__t">原則</span>
+    <strong>「決定的に再生成できるものは上げない。人間とLLMが作ったものは上げる」</strong>です。</div>
+
+  <div class="gitgrid">
+    <div class="gitcol gitcol--no">
+      <p class="cardt">○ 上げない（再生成可）</p>
+      <div class="tw"><table>
+        <thead><tr><th>対象</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap"><code>data/raw/</code></td><td><code>logs/</code> のバイト単位のコピー。上げるとリポジトリが二重になる（96本で約19MB）</td></tr>
+          <tr><td class="nowrap"><code>data/normalized/</code></td><td><code>s1_normalize</code> で作り直せる（約25MB）。辞書を1語直すとTSV全行が差分になり履歴を汚す</td></tr>
+          <tr><td class="nowrap"><code>data/packs/</code></td><td><code>s2_pack</code> で作り直せる（約35MB）。中身はプロンプト＋ログの再掲</td></tr>
+          <tr><td class="nowrap"><code>data/review/doctor_report.md</code></td><td>毎回上書きされる健診結果</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="gitcol gitcol--yes">
+      <p class="cardt">● 上げる（再生成不可）</p>
+      <div class="tw"><table>
+        <thead><tr><th>対象</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr><td class="nowrap"><strong><code>data/llm_out/</code></strong></td><td>Claudeの生出力。<strong>同じ抽出は二度と再現できない</strong>（モデルも確率的挙動も変わる）</td></tr>
+          <tr><td class="nowrap"><code>data/cards/</code></td><td>検証済みカード庫。逐語確定など<strong>人間の労力が埋まっている</strong></td></tr>
+          <tr><td class="nowrap"><code>data/ledger/</code></td><td>未回収/回収済みの伏線。このパイプラインで最も価値のある蓄積</td></tr>
+          <tr><td class="nowrap"><code>data/review/RV_*.md</code></td><td>試聴して書き込んだ逐語と採否の記録</td></tr>
+          <tr><td class="nowrap"><code>data/handoff/</code></td><td>実際にwikiへ渡した内容。編集の根拠を後から説明できる</td></tr>
+          <tr><td class="nowrap"><code>data/state/</code></td><td>進捗。消すと同じ作業を二重にやる</td></tr>
+          <tr><td class="nowrap"><code>config/</code></td><td>辞書・語彙群・機能レジストリ・既知の不在・配信の関係</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <p>この振り分けで、クローンした人は <code>logs/</code> から <code>s0 → s1</code> を回すだけで作業を再開でき、
+  <strong>wikiの1行から、カード → 出典URL → 元ログまで遡れる鎖は途切れません</strong>。</p>
+  <div class="note note--check" data-i="🧠"><span class="note__t">覚え方</span>
+    <code>packs/</code> に置くのは<strong>入力</strong>（再生成可）、<code>llm_out/</code> に置くのは<strong>出力</strong>（再生成不可）、という分け方で覚えてください。
+    実際のルールはリポジトリ直下の <code>.gitignore</code> にあります。</div>
+
+  <div class="chain">
+    <span>wikiの1行</span><i>←</i><span>カード</span><i>←</i><span>出典URL</span><i>←</i><span>元ログ</span>
+    <em>この鎖は途切れない</em>
+  </div>
+</section>
+
+<!-- ========== 6. モデルB ========== -->
+<section class="sec" id="modelb">
+  <span class="sec__num">SECTION 6</span>
+  <h2>モデルB（Claude Code）への移行メモ</h2>
+  <p>校正期が終わったら、このフォルダごとClaude Codeに渡して
+  「MANUAL.mdの工程のStep0〜4を一括実行して、レビューパケットまで作って」と言えばそのまま半自動化できます。</p>
+  <div class="note note--stop" data-i="🧑"><span class="note__t">Step5（試聴・チェック・貼付）だけは移行しない</span>
+    そこが品質の源泉です。</div>
+  <p>スクリプトは全て標準ライブラリなので、環境を選びません。</p>
+</section>
+
+<!-- ========== 7. トラブルシュート ========== -->
+<section class="sec" id="trouble">
+  <span class="sec__num">SECTION 7</span>
+  <h2>トラブルシュート</h2>
+  <p class="sec__dek">症状をクリックすると対処が開きます。</p>
+
+  <details>
+    <summary>パックが大きすぎてClaudeが途中で切れる</summary>
+    <div class="dbody"><p><code>--split 2</code>（配信）/ <code>--split 3</code>（X 2月など）で分割。</p></div>
+  </details>
+  <details>
+    <summary>ingestで破棄が多い</summary>
+    <div class="dbody"><p>Claudeが前置きやコードフェンスを付けている（フェンスは自動無視）。JSONが複数行に折り返されていないか確認。</p></div>
+  </details>
+  <details>
+    <summary>同じカードが二重に入った気がする</summary>
+    <div class="dbody"><p>IDは内容ハッシュ入りで同一出力は自動スキップ。別表現の重複はパケットで <code>DROP</code>。</p></div>
+  </details>
+  <details>
+    <summary>状態をやり直したい</summary>
+    <div class="dbody"><p><code>data/state/</code> の該当ファイルを削除。</p>
+      <div class="tw"><table>
+        <thead><tr><th>ファイル</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td><code>manifest.json</code></td><td>Step1済み管理</td></tr>
+          <tr><td><code>match_seen.json</code></td><td>照合済み</td></tr>
+          <tr><td><code>in_review.json</code></td><td>パケット掲載中</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </details>
+  <details>
+    <summary>Step0で配信が0件になる／一部しか出ない</summary>
+    <div class="dbody"><p><code>--dry-run --verbose</code> で無視されたファイルを確認。多くは <code>info.txt</code> が無くファイル名にも動画IDが無いケース（<code>要確認</code> に理由が出ます）。</p></div>
+  </details>
+  <details>
+    <summary>同じ配信が2つの日付で登録された</summary>
+    <div class="dbody"><p><code>info.txt</code> の投稿日とフォルダ名の日付が食い違っている。<code>info.txt</code> が正なので、古い方の <code>data/raw/streams/</code> フォルダを削除して再実行。</p></div>
+  </details>
+  <details>
+    <summary>辞書を増やしたい</summary>
+    <div class="dbody"><p><code>DATA-ISSUES.md §2</code> の追加条件を満たす時だけ <code>config/asr_fixes.tsv</code> に1行追加（ゲート3）。</p></div>
+  </details>
+</section>
+
+</main>
+</div><!-- /layout -->
+</div><!-- /wrap -->
+
+<footer class="foot">
+  <div class="wrap">
+    <div>しずくwiki ログ処理パイプライン — 操作マニュアル（モデルA：手動運転版）<br>
+      <span style="font-size:12px">関連ドキュメント: <code>DATA-ISSUES.md</code>（データ不備の対処 / doctor.pyと対）・<code>README.md</code>・<code>prompts/draft_wiki.md</code></span></div>
+    <div><a href="#top" class="tbtn" style="text-decoration:none">↑ 先頭へ</a></div>
+  </div>
+</footer>
+
+<!-- ===================== COMMAND DRAWER ===================== -->
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer__h">
+    <h3>コマンド一覧</h3>
+    <div style="flex:1"></div>
+    <button class="tbtn" id="drawerClose">閉じる</button>
+  </div>
+  <div class="drawer__b" id="drawerBody"></div>
+</aside>
+
+<script>
+(function(){
+"use strict";
+var root=document.documentElement, $=function(s,c){return (c||document).querySelector(s)}, $$=function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))};
+
+/* ---------- theme ---------- */
+var stored=null; try{stored=localStorage.getItem('szk-theme')}catch(e){}
+if(!stored && window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches) stored='dark';
+if(stored) root.setAttribute('data-theme',stored);
+$('#themeBtn').addEventListener('click',function(){
+  var next = root.getAttribute('data-theme')==='dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme',next);
+  try{localStorage.setItem('szk-theme',next)}catch(e){}
+});
+
+/* ---------- clipboard ---------- */
+function flash(btn,label){
+  var t=btn.getAttribute('data-label')||btn.textContent;
+  btn.setAttribute('data-label',t);
+  btn.classList.add('done'); btn.textContent=label;
+  setTimeout(function(){btn.classList.remove('done');btn.textContent=t;},1400);
+}
+function copy(text,btn){
+  var done=function(){flash(btn,'コピー済')};
+  var fb=function(){
+    var ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try{document.execCommand('copy'); done();}catch(e){flash(btn,'失敗');}
+    document.body.removeChild(ta);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, fb);
+  } else fb();
+}
+
+/* ---------- copy button on every code block ---------- */
+$$('.codeblock').forEach(function(cb){
+  var pre=$('pre',cb); if(!pre) return;
+  var b=document.createElement('button');
+  b.className='copy'; b.type='button'; b.textContent='コピー';
+  b.addEventListener('click',function(){copy(pre.innerText.replace(/\s+$/,''),b)});
+  cb.appendChild(b);
+});
+
+/* ---------- collect commands into the drawer ---------- */
+var CMD_RE=/^(python|py|python3|cd|chcp|git)\s/;
+var groups=[], seen={};
+$$('main code').forEach(function(code){
+  var sec=code.closest('section.sec'); if(!sec) return;
+  var h=$('h2',sec); var title=h?h.textContent.replace(/\s+/g,' ').trim():'その他';
+  var num=$('.sec__num',sec); if(num) title=num.textContent.replace(/\s+/g,' ').trim().split('🖥')[0].split('🤖')[0].split('🧑')[0].trim()+'｜'+title;
+  code.textContent.split('\n').forEach(function(line){
+    line=line.trim(); if(!CMD_RE.test(line)) return;
+    var note='', m=line.match(/\s+#\s*(.+)$/);
+    if(m){note=m[1]; line=line.slice(0,m.index).trim();}
+    if(seen[line]) return; seen[line]=1;
+    var g=null;
+    for(var i=0;i<groups.length;i++){ if(groups[i].title===title){g=groups[i];break} }
+    if(!g){g={title:title,items:[]}; groups.push(g);}
+    g.items.push({cmd:line,note:note});
+  });
+});
+var body=$('#drawerBody');
+var intro=document.createElement('p');
+intro.style.cssText='font-size:13px;color:var(--ink-3);line-height:1.8;margin:4px 0 0';
+intro.textContent='本文に出てくるコマンドを出現順にまとめたものです。すべて shizuku-pipeline フォルダ直下で実行します。';
+body.appendChild(intro);
+groups.forEach(function(g){
+  var h=document.createElement('p'); h.className='drawer__g'; h.textContent=g.title; body.appendChild(h);
+  g.items.forEach(function(it){
+    var row=document.createElement('div'); row.className='cmd';
+    var c=document.createElement('code'); c.textContent=it.cmd;
+    var b=document.createElement('button'); b.type='button'; b.textContent='copy';
+    b.addEventListener('click',function(){copy(it.cmd,b)});
+    row.appendChild(c); row.appendChild(b); body.appendChild(row);
+    if(it.note){
+      var n=document.createElement('p');
+      n.style.cssText='margin:-3px 0 9px;font-size:11.8px;color:var(--ink-3);line-height:1.6;padding-left:2px';
+      n.textContent='↳ '+it.note; body.appendChild(n);
+    }
+  });
+});
+
+/* ---------- drawer open/close ---------- */
+var drawer=$('#drawer'), scrim=$('#scrim');
+function setDrawer(on){
+  drawer.classList.toggle('on',on); scrim.classList.toggle('on',on);
+  drawer.setAttribute('aria-hidden', on?'false':'true');
+}
+$('#cmdBtn').addEventListener('click',function(){setDrawer(!drawer.classList.contains('on'))});
+$('#drawerClose').addEventListener('click',function(){setDrawer(false)});
+scrim.addEventListener('click',function(){setDrawer(false)});
+
+/* ---------- mobile menu ---------- */
+var toc=$('#toc'), menuBtn=$('#menuBtn');
+menuBtn.addEventListener('click',function(){
+  var on=!toc.classList.contains('on');
+  toc.classList.toggle('on',on); menuBtn.setAttribute('aria-expanded',String(on));
+});
+$$('#toc a').forEach(function(a){a.addEventListener('click',function(){toc.classList.remove('on');menuBtn.setAttribute('aria-expanded','false')})});
+
+/* ---------- expand / collapse all ---------- */
+var expandBtn=$('#expandAll');
+expandBtn.addEventListener('click',function(){
+  var ds=$$('details'), anyClosed=ds.some(function(d){return !d.open});
+  ds.forEach(function(d){d.open=anyClosed});
+  expandBtn.textContent = anyClosed ? 'すべての折りたたみを閉じる' : 'すべての折りたたみを開く';
+});
+
+/* ---------- progress + scrollspy ---------- */
+var links=$$('#toc a'), targets=links.map(function(a){return document.getElementById(a.getAttribute('href').slice(1))});
+var bar=$('#progress'), ticking=false;
+function onScroll(){
+  var h=document.documentElement, max=h.scrollHeight-h.clientHeight;
+  bar.style.width=(max>0?(h.scrollTop/max*100):0)+'%';
+  var best=-1, y=h.scrollTop+130;
+  for(var i=0;i<targets.length;i++){ if(targets[i] && targets[i].offsetTop<=y) best=i; }
+  links.forEach(function(a,i){a.classList.toggle('on', i===best)});
+  ticking=false;
+}
+window.addEventListener('scroll',function(){ if(!ticking){ticking=true; window.requestAnimationFrame(onScroll)} },{passive:true});
+window.addEventListener('resize',onScroll); onScroll();
+
+/* ---------- search ---------- */
+var SEL='h2,h3,h4,p,li,td,dd,summary,.stn__p,.ff,.rung,.gate,.abcdef div';
+var index=[];
+$$('main').forEach(function(m){
+  $$(SEL,m).forEach(function(el){
+    if(el.closest('.results')) return;
+    var txt=(el.innerText||'').replace(/\s+/g,' ').trim();
+    if(txt.length<3 || txt.length>400) return;
+    var sec=el.closest('section.sec'); var h=sec?$('h2',sec):null;
+    index.push({el:el, txt:txt, low:txt.toLowerCase(), sec:h?h.innerText.replace(/\s+/g,' ').trim():''});
+  });
+});
+var q=$('#q'), rbox=$('#results');
+function reveal(el){
+  var d=el.closest('details'); if(d && !d.open) d.open=true;
+  el.scrollIntoView({block:'center', behavior:'smooth'});
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  setTimeout(function(){el.classList.remove('flash')},1600);
+}
+function render(term){
+  rbox.innerHTML='';
+  if(!term){rbox.classList.remove('on');return}
+  var low=term.toLowerCase(), hits=[];
+  for(var i=0;i<index.length && hits.length<14;i++){ if(index[i].low.indexOf(low)>-1) hits.push(index[i]); }
+  if(!hits.length){
+    var n=document.createElement('div'); n.className='r-none'; n.textContent='「'+term+'」は見つかりませんでした';
+    rbox.appendChild(n); rbox.classList.add('on'); return;
+  }
+  hits.forEach(function(hit){
+    var b=document.createElement('button'); b.type='button';
+    var s=document.createElement('span'); s.className='r-sec'; s.textContent=hit.sec;
+    var t=document.createElement('span'); t.className='r-txt';
+    var pos=hit.low.indexOf(low), from=Math.max(0,pos-16);
+    t.textContent=(from?'…':'')+hit.txt.slice(from,from+90);
+    b.appendChild(s); b.appendChild(t);
+    b.addEventListener('click',function(){rbox.classList.remove('on'); q.blur(); reveal(hit.el)});
+    rbox.appendChild(b);
+  });
+  rbox.classList.add('on');
+}
+q.addEventListener('input',function(){render(q.value.trim())});
+q.addEventListener('focus',function(){if(q.value.trim())render(q.value.trim())});
+document.addEventListener('click',function(e){ if(!e.target.closest('.search')) rbox.classList.remove('on') });
+document.addEventListener('keydown',function(e){
+  if(e.key==='/' && document.activeElement!==q && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)){
+    e.preventDefault(); q.focus();
+  }
+  if(e.key==='Escape'){ rbox.classList.remove('on'); setDrawer(false); toc.classList.remove('on'); q.blur(); }
+});
+
+/* ---------- open every details before printing ---------- */
+window.addEventListener('beforeprint',function(){
+  $$('details').forEach(function(d){ d.setAttribute('data-was',d.open?'1':''); d.open=true; });
+});
+window.addEventListener('afterprint',function(){
+  $$('details').forEach(function(d){ d.open = d.getAttribute('data-was')==='1'; });
+});
+
+/* ---------- glossary tooltips on touch ---------- */
+$$('.gloss').forEach(function(g){
+  g.setAttribute('tabindex','0');
+  g.addEventListener('click',function(e){
+    e.preventDefault();
+    var on=g.classList.contains('on');
+    $$('.gloss.on').forEach(function(o){o.classList.remove('on')});
+    g.classList.toggle('on',!on);
+  });
+});
+})();
+</script>
+</body>
+</html>

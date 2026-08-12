@@ -164,8 +164,9 @@ def show_status():
 
 def write_worklist(made):
     lines = ["# 抽出ワークリスト", "",
-             "1パックにつき**新しいClaudeチャットを1つ**使う。終わったら `[x]` を付ける。",
-             "Claudeの出力は `data/llm_out/` に保存（gitで保存される。packs/ は再生成できるので保存されない）。", ""]
+             "**1配信につき新しいClaudeチャットを1つ**使う。別配信を同じチャットに混ぜない。",
+             "同じ配信が `partN` に分かれている場合は、その配信の全partを**同じチャットで順番に**渡す（前半の文脈を保つため）。",
+             "Claudeの出力は `data/llm_out/` にパックと同じ名前(.jsonl)で保存。全部揃ったら `python scripts/s2_batch.py --apply` で一括取込（チェックも自動)。", ""]
     for m in made:
         pi, pn = m["part"]
         part = f"（{pi}/{pn}）" if pn > 1 else ""
