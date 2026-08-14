@@ -36,7 +36,7 @@ LLMは有能だが確率的で、大量処理では非決定性がコストに�
 
 ```
         ┌─────────── 決定的スクリプト（LLMなし） ───────────┐   ┌── LLM ──┐   ┌─ 人間 ─┐
-logs/ ─▶ S0 intake ─▶ raw/ ─▶ S1 normalize ─▶ normalized/ ─▶ S2 pack ─▶│抽出 ①│─▶ ingest ─▶ cards/ + ledger/
+logs/ ─▶ S0 intake ─▶ raw/ ─▶ S1 normalize ─▶ normalized/ ─▶ S2 pack ─▶│抽出 ①│─▶ ingest/batch ─▶ cards/ + ledger/
                                                               S3 match ─▶│判定 ②│─▶ ingest ─▶ proposals
                                                               S4 packet ───────────────────▶│試聴/採否│─▶ S5 apply ─▶ handoff ─▶│起草 ③│─▶ Fandom貼付
                                                               doctor（独立）
@@ -114,6 +114,12 @@ S5（人間）が第二段: 試聴して `逐語:` 行を書き、初めて `ver
 チャットが保存できなかった配信は、映像からOCRで復元する（`*.live_chat_ocr.txt`）。
 時刻は粗く（15秒グリッド）、誤字を含み、件数は下限値。よってバースト比較に注意し、**逐語には決して使わない**。
 S2 ingestが機械的に `verbatim=false` に落とす。
+
+### 6-7. LLM出力の形の揺れを取込口で正規化する
+LLMは指示しても `evidence` を文字列配列でなく dict の配列（`[{"time":...,"text":...}]`）で返すことがある。
+これを放置すると下流（照合・パケット）で連結時に落ちる。よって**取込口(S2 ingest)で `evidence`/`wiki_target` を必ず文字列リストへ正規化**し、
+下流も `flat_text`/`as_str_list` で防御する。原則は「**外から来る形は信用せず、境界で正す**」。
+既存データの一括修復は `repair_cards.py`。
 
 ## 7. gitに何を残すか
 

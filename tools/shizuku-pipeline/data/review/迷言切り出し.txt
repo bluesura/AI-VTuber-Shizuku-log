@@ -1,0 +1,25 @@
+- [x] ADOPT yt-oC95hzxO1DM-t651-ev3940a0
+      案: * 2026-04-11：配信中に「面白ろ」系の発話が長時間反復するループバグが発生した<ref name="yt-oC95hzxO1DM-t651">[https://www.youtube.com/live/oC95hzxO1DM?t=651 【雑談配信】今週の振り返り【AI VTuber しずく】（該当箇所）]（YouTube、2026年4月11日）</ref>
+      根拠発話(ASR): 面白ろ。
+      出典: https://www.youtube.com/live/oC95hzxO1DM?t=651   ⚠試聴で発言確認
+      補足: これはどちらかというと迷言。
+- [ ] DROP yt-oC95hzxO1DM-t651-ev3940a0
+
+---
+【日付】2023-02-11
+【出来事の概要】円周率などの長大な数値読み上げが止まりにくくなり、タイムアウト未実装が判明して手動停止対応となった
+【ソースURL】https://www.youtube.com/live/yjF5KFVRjS4?t=107
+---
+---
+【日付】2023-05-13
+【出来事の概要】円周率ASMR中に数列や発話の反復が続き、チャットで「新しい円周率バグ」と呼ばれた
+【ソースURL】https://www.youtube.com/live/w3jVdQqvvhc?t=246
+---
+
+
+---
+【日付】2026-03-14
+【出来事の概要】あき先生本人から高額スーパーチャットが届き、チャットが大きく沸いた
+【ソースURL】https://www.youtube.com/live/pxBzfluxQ1o?t=3131
+【補足(人手)】開発者本人が赤スパを飛ばすも、株主総会と揶揄されてしずくからいじられる
+

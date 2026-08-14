@@ -36,19 +36,48 @@ def fmt_quote(c):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mature-days", type=int, default=30)
+    ap.add_argument("--until", help="この日(YYYY-MM-DD)までの候補だけを載せる（区切りレビュー）")
+    ap.add_argument("--since", help="この日(YYYY-MM-DD)以降の候補だけを載せる")
+    ap.add_argument("--kinds", help="載せる種別をカンマ区切りで限定。例 event,capability / quote / profile")
+    ap.add_argument("--limit", type=int, default=0, help="各セクションの最大件数（0=無制限）")
+    ap.add_argument("--reset", action="store_true",
+                    help="in_review をクリアしてから作る（誤って二重生成し空パケットが出たときの作り直し）")
     a = ap.parse_args()
+    if a.reset:
+        # 旧仕様（パケットに載せた時点でin_reviewへ登録）で溜まった記録を一掃する後方互換用。
+        # 新仕様では load_all_cards の status だけで候補を決めるので通常は不要。
+        save_state("in_review.json", {})
+        print("in_review をクリアしました（旧記録の掃除。新仕様では候補は status で管理します）。")
     by_id, _ = load_all_cards()
-    in_rev = load_state("in_review.json", {})
-    cands = [c for c in by_id.values() if c.get("status") == "candidate" and c["id"] not in in_rev]
+    # in_review は「s5で処理済み（採用/却下/確定）としてマークされたID」。パケットに載せただけでは登録しない。
+    applied = load_state("in_review.json", {})
+
+
+    def in_window(c):
+        d = c.get("date_jst", "")
+        if a.until and d > a.until: return False
+        if a.since and d < a.since: return False
+        return True
+    kind_filter = None
+    if a.kinds:
+        alias = {"quote": "quote_candidate", "profile": "profile_fact", "note": "stream_note"}
+        kind_filter = {alias.get(k.strip(), k.strip()) for k in a.kinds.split(",")}
+    def want(kind):
+        return kind_filter is None or kind in kind_filter
+    def cap(lst):
+        return lst[:a.limit] if a.limit else lst
+
+    cands = [c for c in by_id.values()
+             if c.get("status") == "candidate" and c["id"] not in applied and in_window(c)]
     cutoff = (date.today() - timedelta(days=a.mature_days)).isoformat()
-    ev  = sorted([c for c in cands if c["kind"] == "event"], key=lambda c: c["date_jst"])
-    qt  = sorted([c for c in cands if c["kind"] == "quote_candidate" and c["date_jst"] <= cutoff], key=lambda c: c["date_jst"])
-    qt_young = [c for c in cands if c["kind"] == "quote_candidate" and c["date_jst"] > cutoff]
-    cap = sorted([c for c in cands if c["kind"] == "capability"], key=lambda c: c["date_jst"])
-    pf  = sorted([c for c in cands if c["kind"] in ("profile_fact", "stream_note")], key=lambda c: c["date_jst"])
+    ev  = cap(sorted([c for c in cands if c["kind"] == "event" and want("event")], key=lambda c: c["date_jst"]))
+    qt  = cap(sorted([c for c in cands if c["kind"] == "quote_candidate" and want("quote_candidate") and c["date_jst"] <= cutoff], key=lambda c: c["date_jst"]))
+    qt_young = [c for c in cands if c["kind"] == "quote_candidate" and want("quote_candidate") and c["date_jst"] > cutoff]
+    cap_ = cap(sorted([c for c in cands if c["kind"] == "capability" and want("capability")], key=lambda c: c["date_jst"]))
+    pf  = cap(sorted([c for c in cands if c["kind"] in ("profile_fact", "stream_note") and (want("profile_fact") or want("stream_note"))], key=lambda c: c["date_jst"]))
     props = jsonl_read(DATA / "ledger" / "proposals.jsonl")
     opens = [l for l in jsonl_read(DATA / "ledger" / "open.jsonl") if l.get("status") == "open"]
-    new_opens = [l for l in opens if l["loop_id"] not in in_rev]
+    new_opens = [l for l in opens if l["loop_id"] not in applied]
 
     rid = "RV_" + date.today().strftime("%Y%m%d")
     n = 1
@@ -58,6 +87,7 @@ def main():
          "",
          "記入方法: 実行してよい行の `[ ]` を `[x]` にする。未チェック＝保留（次回また出ます）。",
          "名言は **必ず試聴 → 「逐語:」行を書き直してから** VERIFY に [x]（ゲート1）。",
+         "各カードの「補足:」行に書いた内容は、ADOPT採用時に handoff へ引き継がれ、wiki起草の材料になります（任意）。",
          ""]
 
     L.append(f"## A. 年表候補（event: {len(ev)}件）")
@@ -66,6 +96,7 @@ def main():
               f"      案: * {c['date_jst']}：{c.get('summary','')}{wikiref(c)}",
               f"      根拠発話(ASR): {c.get('text','')[:60]}",
               f"      出典: {c['source'].get('url','')}   ⚠試聴で発言確認",
+              f"      補足: （任意。ここに書いた内容はhandoffに引き継がれ、wiki起草の材料になります）",
               f"- [ ] DROP {c['id']}", ""]
 
     L.append(f"## B. 名言・迷言候補（quote: {len(qt)}件 / 熟成待ち{len(qt_young)}件は次回以降）")
@@ -75,15 +106,17 @@ def main():
               f"      ASR : {fmt_quote(c)}",
               f"      逐語: （←試聴して正確に書き直す。掛け合いは【発話者】形式のまま）",
               f"      反応: " + " / ".join(as_str_list(c.get("evidence"))[:3]),
+              f"      補足: （任意。文脈やニュアンスのメモ。handoffに引き継がれます）",
               f"- [ ] ADOPT {c['id']}   （逐語確定済みのものだけ）",
               f"- [ ] DROP {c['id']}", ""]
 
-    L.append(f"## C. 機能カード候補（capability: {len(cap)}件）")
-    for c in cap:
+    L.append(f"## C. 機能カード候補（capability: {len(cap_)}件）")
+    for c in cap_:
         L += [f"- [ ] ADOPT {c['id']}",
               f"      機能仮名: {c.get('feature_hint','?')} / {c.get('summary','')}",
               f"      証拠: " + " / ".join(as_str_list(c.get("evidence"))[:3]),
               f"      出典: {c['source'].get('url','')}   ⚠試聴で確認 → 採用後レジストリに追記",
+              f"      補足: （任意。handoffに引き継がれます）",
               f"- [ ] DROP {c['id']}", ""]
 
     L.append(f"## D. 台帳")
@@ -105,6 +138,7 @@ def main():
     for c in pf:
         L += [f"- [ ] ADOPT {c['id']}   [{c['kind']}→{'/'.join(as_str_list(c.get('wiki_target')))}] {c.get('summary','')}",
               f"      出典: {c['source'].get('url','')}",
+              f"      補足: （任意。handoffに引き継がれます）",
               f"- [ ] DROP {c['id']}", ""]
 
     L.append("## F. シグナル参考（今回パケットに関係した配信の概要欄新規行など）")
@@ -117,11 +151,10 @@ def main():
     L.append("")
     out = DATA / "review" / f"{rid}.md"
     write(out, "\n".join(L))
-    for c in cands: in_rev[c["id"]] = rid
-    for l in new_opens: in_rev[l["loop_id"]] = rid
-    save_state("in_review.json", in_rev)
+    # ※ここでは in_review に登録しない。処理済みマークは s5_apply が付ける。
+    #   これにより「まだ処理していない候補」はパケットを作り直すたびに何度でも出る。
     print(f"生成: {out.relative_to(BASE)}")
-    print(f"  年表{len(ev)} / 名言{len(qt)}(熟成待ち{len(qt_young)}) / 機能{len(cap)} / 供給{len(pf)} / open確認{len(new_opens)} / クローズ提案{len(props)}")
+    print(f"  年表{len(ev)} / 名言{len(qt)}(熟成待ち{len(qt_young)}) / 機能{len(cap_)} / 供給{len(pf)} / open確認{len(new_opens)} / クローズ提案{len(props)}")
     print("→ エディタで開いて試聴・チェック → python scripts/s5_apply.py --packet " + str(out.relative_to(BASE)))
 
 if __name__ == "__main__":

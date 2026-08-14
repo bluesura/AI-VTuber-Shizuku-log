@@ -86,7 +86,7 @@ candidate ──VERIFY(逐語確定)──▶ verified ──ADOPT──▶ appr
 | `desc_lines.json` | dict | `{概要欄の行: 初出vid}`（新規行検知の基準線） |
 | `extracted.json` | dict | `{"stream:<vid>"\|"x:<month>": {"cards":n,"at":日付}}` |
 | `match_seen.json` | **list** | 照合済み**ペアID** `["loop__card", ...]`（カードIDではない） |
-| `in_review.json` | dict | `{card/loop id: パケットID}`（掲載中） |
+| `in_review.json` | dict | `{card/loop id: 処理日}`（**s5で処理済み**のID。パケット掲載では登録されない） |
 
 削除すると再処理される（例: `manifest.json` を消すとS1が全配信を再処理）。
 
@@ -99,10 +99,12 @@ s2_pack.py     --all [--redo] | --stream <vid> | --x <YYYY-MM> | --status
                [--split N] [--max-chars 90000]
 s2_ingest.py   --file <jsonl> --from stream:<vid>|x:<YYYY-MM>
 s2_batch.py    (引数なし=ドライラン) | --apply | --status   # llm_outを一括取込・WORKLIST自動チェック
-s3_match.py    (引数なし=照合パック生成) | --ingest <judgments.jsonl> | --list-open
-s4_packet.py   [--mature-days 30]
+s3_match.py    (引数なし=照合パック生成) | --until YYYY-MM-DD | --max-pairs N | --ingest <j.jsonl> | --list-open | --status
+s3_reset.py    (引数なし=表示) | --apply                   # match_seen(照合済み記録)をクリア
+s4_packet.py   [--mature-days 30] [--until D][--since D][--kinds k,k][--limit N][--reset]
 s5_apply.py    --packet <RV_*.md>
 doctor.py      (引数なし)
+repair_cards.py (引数なし=ドライラン) | --apply           # 既存カード/台帳のevidence等を文字列へ修復
 ```
 
 ## 8. パック／パケット／handoff の形式
@@ -116,9 +118,9 @@ doctor.py      (引数なし)
 - **レビューパケット** `data/review/RV_<YYYYMMDD>-NN.md`: セクションA〜F。
   チェック規約: `- [x] ACTION <id>` の行だけ実行。未チェック＝保留（次回再掲）。
   アクション: `ADOPT` / `VERIFY`（直後の `逐語:` 行を本文化）/ `DROP` / `KEEP` / `CLOSE <loop_id> BY <card_id>`。
-  名言は VERIFY で `逐語:` を書いてから ADOPT（ゲート1）。
+  名言は VERIFY で `逐語:` を書いてから ADOPT（ゲート1）。各カードの `補足:` 行に書いた内容は ADOPT時に handoff へ転記される。
 - **handoff** `data/handoff/handoff_<packet>.txt`: 承認済みのみ。
-  年表は3行形式【日付】【出来事の概要】【ソースURL】、名言は逐語＋出典、回収成立は括弧書き追補の材料、機能・人物は加筆材料。
+  年表は【日付】【出来事の概要】【ソースタイトル】【ソースURL】、名言は逐語＋出典タイトル＋出典URL、回収成立は括弧書き追補の材料、機能・人物は加筆材料。
 
 ## 9. wiki出力の書式（スキル側が最終権威）
 

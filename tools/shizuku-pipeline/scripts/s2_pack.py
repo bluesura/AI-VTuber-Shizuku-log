@@ -98,7 +98,7 @@ def build_stream(vid, split=1, max_chars=0, quiet=False):
             print(f"生成: {out.relative_to(BASE)}  ({chars:,}文字 / {len(ch)}行)")
             print(f"  保存名: data/llm_out/{out.stem}.jsonl （パックと同じ名前・拡張子だけ .jsonl）")
     if not quiet:
-        print("→ このファイルをClaudeのチャットに添付し「このファイルの指示に従ってカードを抽出して」と送る。"
+        print("→ このファイルをClaudeのチャットに添付し「このファイルの指示に従ってカードをjsonlファイルで抽出して」と送る。"
               "\n→ 返答を上の保存名で data/llm_out/ に置き、s2_ingest へ（名前が違っても --from のIDから探します）。")
     return made
 

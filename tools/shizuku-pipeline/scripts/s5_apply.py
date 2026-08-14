@@ -20,7 +20,7 @@ from shizulib import *
 ACT_RE = re.compile(r"^\s*-\s*\[(x|X| )\]\s+(ADOPT|VERIFY|DROP|KEEP|CLOSE)\s+(\S+)(?:\s+BY\s+(\S+))?")
 
 def parse_packet(path):
-    acts, verbatims = [], {}
+    acts, verbatims, notes = [], {}, {}
     lines = read(path).splitlines()
     for i, line in enumerate(lines):
         m = ACT_RE.match(line)
@@ -36,7 +36,16 @@ def parse_packet(path):
                     if v and not v.startswith("（←"):
                         verbatims[a1] = v
                     break
-    return acts, verbatims
+        if act in ("ADOPT", "VERIFY"):
+            for j in range(i + 1, min(i + 8, len(lines))):
+                mm = re.match(r"\s*補足[:：]\s*(.*)", lines[j])
+                if mm:
+                    v = mm.group(1).strip()
+                    if v and not v.startswith("（任意"):
+                        notes[a1] = v
+                    break
+                if ACT_RE.match(lines[j]): break   # 次のアクションに達したら打ち切り
+    return acts, verbatims, notes
 
 def parts_from_verbatim(v):
     if "【" not in v: return None
@@ -49,11 +58,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--packet", required=True)
     a = ap.parse_args()
-    acts, verbatims = parse_packet(a.packet)
+    acts, verbatims, notes = parse_packet(a.packet)
     by_id, by_file = load_all_cards()
     opens = jsonl_read(DATA / "ledger" / "open.jsonl")
     props = jsonl_read(DATA / "ledger" / "proposals.jsonl")
     in_rev = load_state("in_review.json", {})
+    applied_now = set()
     today = date.today().isoformat()
     n = {"verified": 0, "approved": 0, "rejected": 0, "closed": 0, "kept": 0, "dropped_loop": 0}
     closed_pairs = []
@@ -75,6 +85,7 @@ def main():
             c = by_id[a1]
             if c["kind"] == "quote_candidate" and not c.get("verbatim"):
                 print(f"  ⚠ ADOPT {a1}: 逐語未確定の名言は採用できません（先にVERIFY）"); continue
+            if a1 in notes: c["note"] = notes[a1]
             c["status"] = "approved"; n["approved"] += 1
         elif act == "DROP":
             if a1 in by_id:
@@ -91,7 +102,10 @@ def main():
                     pr = next((p for p in props if p["loop_id"] == a1 and p["card_id"] == a2), {})
                     closed_pairs.append((l, by_id.get(a2, {}), pr.get("reason", "")))
                     n["closed"] += 1
-        in_rev.pop(a1, None)
+        applied_now.add(a1)   # このIDは処理済み（採用/却下/確定/保持）。次回パケットから外す
+
+    for k in applied_now:
+        in_rev[k] = today
 
     # 保存: カード / 台帳（closedはclosed.jsonlへ移す）
     save_cards(by_file)
@@ -105,13 +119,29 @@ def main():
     save_state("in_review.json", in_rev)
 
     # handoff生成（承認済みのみ）
+    def src_title(c):
+        """出典のタイトルを返す。YouTubeは配信タイトル(meta.json)、Xは投稿本文の冒頭。"""
+        s = c.get("source", {})
+        if s.get("type") == "yt":
+            m = stream_meta(s.get("video_id", "")) or {}
+            return m.get("title", "")
+        if s.get("type") == "x":
+            body = c.get("text") or ""
+            if not body and c.get("parts"):
+                body = " ".join(p.get("text", "") for p in c["parts"])
+            body = body.replace("\n", " ").strip()
+            return (body[:40] + "…") if len(body) > 40 else body
+        return ""
     H = [f"# handoff {Path(a.packet).stem} → wiki起草チャット（prompts/draft_wiki.md 参照）", ""]
     evs = [c for c in by_id.values() if c["status"] == "approved" and c["kind"] == "event"]
     if evs:
         H.append("=== 年表（shizuku-wikiスキルの受け渡し形式のまま渡す） ===")
         for c in sorted(evs, key=lambda c: c["date_jst"]):
             H += [f"【日付】{c['date_jst']}", f"【出来事の概要】{c.get('summary','')}",
-                  f"【ソースURL】{c['source'].get('url','')}", "---"]
+                  f"【ソースタイトル】{src_title(c)}",
+                  f"【ソースURL】{c['source'].get('url','')}"]
+            if c.get("note"): H.append(f"【補足(人手)】{c['note']}")
+            H.append("---")
         H.append("")
     qts = [c for c in by_id.values() if c["status"] == "approved" and c["kind"] == "quote_candidate"]
     if qts:
@@ -119,13 +149,16 @@ def main():
         for c in sorted(qts, key=lambda c: c["date_jst"]):
             body = (" ／ ".join(f"【{p['speaker']}】{p['text']}" for p in c["parts"])
                     if c.get("parts") else f"【しずく】{c.get('text','')}")
-            H += [body, f"出典URL: {c['source'].get('url','')}（{c['date_jst']}配信）", "---"]
+            H += [body, f"出典: {src_title(c)}", f"出典URL: {c['source'].get('url','')}（{c['date_jst']}配信）"]
+            if c.get("note"): H.append(f"補足(人手): {c['note']}")
+            H.append("---")
         H.append("")
     if closed_pairs:
         H.append("=== 回収成立（年表の既存行への括弧書き追補を起草させる） ===")
         for l, c, reason in closed_pairs:
             H += [f"ループ: [{l.get('opened')}] {l.get('text','')}",
                   f"　回収: [{c.get('date_jst')}] {c.get('summary','')}",
+                  f"　回収元タイトル: {src_title(c)}",
                   f"　両出典: {l.get('source',{}).get('url','')} / {c.get('source',{}).get('url','')}",
                   f"　判定根拠: {reason}", "---"]
         H.append("")
@@ -134,13 +167,19 @@ def main():
         H.append("=== 機能（紹介ページ「特殊機能」節の加筆材料。採用後 config/features_registry.tsv にも追記） ===")
         for c in caps:
             H += [f"{c.get('feature_hint','?')}: {c.get('summary','')}",
-                  f"出典: {c['source'].get('url','')}　初観測: {c['date_jst']}（※wikiでは「遅くとも」表現を推奨）", "---"]
+                  f"出典タイトル: {src_title(c)}",
+                  f"出典: {c['source'].get('url','')}　初観測: {c['date_jst']}（※wikiでは「遅くとも」表現を推奨）"]
+            if c.get("note"): H.append(f"補足(人手): {c['note']}")
+            H.append("---")
         H.append("")
     pfs = [c for c in by_id.values() if c["status"] == "approved" and c["kind"] in ("profile_fact", "stream_note")]
     if pfs:
         H.append("=== 紹介ページ補足（該当節ソースと一緒に起草チャットへ） ===")
         for c in pfs:
-            H += [f"[{'/'.join(as_str_list(c.get('wiki_target')))}] {c.get('summary','')}  出典: {c['source'].get('url','')}", "---"]
+            H += [f"[{'/'.join(as_str_list(c.get('wiki_target')))}] {c.get('summary','')}",
+                  f"  出典: {src_title(c)} / {c['source'].get('url','')}"]
+            if c.get("note"): H.append(f"補足(人手): {c['note']}")
+            H.append("---")
     out = DATA / "handoff" / f"handoff_{Path(a.packet).stem}.txt"
     write(out, "\n".join(H) + "\n")
     print("反映: " + " / ".join(f"{k}:{v}" for k, v in n.items() if v))

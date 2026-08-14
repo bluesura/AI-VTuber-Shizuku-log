@@ -52,13 +52,18 @@ python scripts/s1_normalize.py --all
 python scripts/s2_pack.py --status                 # 進捗一覧
 python scripts/s2_pack.py --all                    # 未抽出を一括生成 + data/packs/WORKLIST.md
 python scripts/s2_ingest.py --file data/llm_out/<pack名>.jsonl --from stream:<vid>|x:<YYYY-MM>
-python scripts/s2_batch.py [--apply]               # llm_out を一括取込 + WORKLISTチェック自動更新
+python scripts/s2_batch.py [--apply]               # llm_out を一括取込 + WORKLISTチェック自動更新（推奨）
+#   ↑ 全パックのJSONLを llm_out に全部揃えてから一括、が効率的。1本ずつは上の s2_ingest。
+
+# ↑ Step2の推奨ワークフロー: s2_pack --all → (各パックをClaudeへ, 返答を llm_out に同名.jsonlで保存) → s2_batch --apply
 
 # 照合（②）→ パケット → 反映（③）
-python scripts/s3_match.py                          # 照合パック生成
+python scripts/s3_match.py --status                # 未回収ループ・カード数・月別分布
+python scripts/s3_match.py [--until YYYY-MM-DD] [--max-pairs N]   # 照合パック（既定1回1500ペア上限）
 python scripts/s3_match.py --ingest data/llm_out/<judgments>.jsonl
 python scripts/s3_match.py --list-open             # 未回収台帳
-python scripts/s4_packet.py [--mature-days 30]
+python scripts/s3_reset.py [--apply]               # 照合済み記録をリセット（大量実行後のやり直し）
+python scripts/s4_packet.py [--mature-days 30] [--until YYYY-MM-DD] [--kinds event,quote,...] [--limit N] [--reset]
 python scripts/s5_apply.py --packet data/review/RV_xxxx.md
 
 # 健診
@@ -91,11 +96,15 @@ python scripts/repair_cards.py [--apply]            # 壊れたカード(evidenc
 ## 変更するときの注意（ここでミスが起きやすい）
 
 - **ID体系を変えない。** カードID `{base}-{kind[:2]}{sha8[:6]}`（base例 `yt-<vid>-t<秒>` / `x-<postid>`）。IDが変わると重複判定・台帳リンク・パケット照合が全部壊れる。変える場合は移行スクリプトを用意。
+- **Step5は種別ごとに途中まで適用してよい。** `s5_apply` は `[x]` 行だけ処理し `[ ]` は無視。年表だけチェックして適用→名言は後日 `s4_packet --kinds quote` で作り直して続行、が正しい進め方。未処理候補は失われず何度でも再出現する。適用済みパケットは再利用しない。
+- **Step4(パケット)も大量候補では区切る。** `--until`/`--kinds`/`--limit` で分割レビュー。未処理候補は作り直すたび何度でも出る（処理済みだけ外れる）。`--reset`は処理済みを再レビュー対象に戻す時のみ。パケットの `補足:` 行はhandoffに転記される。
+- **Step3は大量データでは区切る。** 過去ログ一括抽出で未回収ループが数百〜数千になると照合ペアが万単位に膨れる。`--until`（期間）と `--max-pairs`（既定1500）で刻む。万単位のパックをLLMに判定させない（`MANUAL.md` Step3）。
 - **`match_seen.json` はペアID。** 「照合済みカード」に戻すと、後から開いたループが既存カードと結びつかず回収を取りこぼす（この設計判断は `docs/ARCHITECTURE.md` の「照合の順序非依存」参照）。
 - **辞書 `config/asr_fixes.tsv` に曖昧な断片を足さない**（ゲート3）。追加条件は `DATA-ISSUES.md §2`。チャット/Xには適用しないこと。
 - **アーカイブ再アップの日付補正を壊さない。** `config/stream_relations.tsv` の `archive_of` により s2_ingest がカード日付を元配信日へ補正する。これが無いと年表の日付が再アップ日で誤る（`DATA-ISSUES.md §14`）。
 - **OCRチャット（`*.live_chat_ocr.txt`）由来は逐語不可。** s2_ingest が機械的に `verbatim=false` に落とす。この防御を外さない（`DATA-ISSUES.md §13`）。
 - **evidence/wiki_target は必ず文字列リスト。** LLMが dict で返すことがある。取込時に `as_str_list` で正規化済みだが、古いデータで s3/s4 が落ちたら `python scripts/repair_cards.py --apply` で修復する。
+- **抽出は1配信=1チャット。同一配信の全partは同じチャットで順番に、別配信は別チャットに。** 別配信を混ぜると動画ID・秒数が混ざったカードが出る（`MANUAL.md` Step2b）。
 - **bashは環境によりdash。** brace展開が使えないことがある。スクリプトはPythonに寄せる。
 - **変更後は必ず**: `python -c "import py_compile,glob;[py_compile.compile(f,doraise=True) for f in glob.glob('scripts/*.py')]"` で全構文チェック → 可能なら実データで一巡。
 
