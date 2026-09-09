@@ -32,6 +32,12 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
+rem ── 自動実行モード ─────────────────────────────────────
+rem 呼び出し例:
+rem   dys.cmd --auto "urls.txt" "C:\path\to\staging"
+rem 対話、pause、Explorer起動を行わず、指定URLリストを処理する。
+if /i "%~1"=="--auto" goto auto_mode
+
 :start
 cls
 echo ==========================================
@@ -102,3 +108,29 @@ if /i "!CONTINUE!"=="y" goto start
 popd
 endlocal
 exit /b 0
+
+:auto_mode
+set "AUTO_URL_FILE=%~2"
+set "AUTO_OUTDIR=%~3"
+
+if not defined AUTO_URL_FILE (
+    echo [Error] --auto にはURLリストファイルが必要です。
+    popd
+    endlocal
+    exit /b 2
+)
+if not exist "!AUTO_URL_FILE!" (
+    echo [Error] URLリストファイルが見つかりません: !AUTO_URL_FILE!
+    popd
+    endlocal
+    exit /b 2
+)
+if not defined AUTO_OUTDIR set "AUTO_OUTDIR=%~dp0"
+
+echo [Auto] URLリスト: !AUTO_URL_FILE!
+echo [Auto] 一時出力先: !AUTO_OUTDIR!
+%PY% "%SCRIPT%" --file "!AUTO_URL_FILE!" --outdir "!AUTO_OUTDIR!"
+set "RC=!ERRORLEVEL!"
+
+popd
+endlocal & exit /b %RC%

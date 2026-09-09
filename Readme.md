@@ -40,6 +40,7 @@ AI-VTuber-Shizuku-log/
 tools/scripts/ 内の主なツールです。
 
 - **download\_youtube\_subtitles.py**: yt-dlp を使用して、動画の字幕、チャット、コメント、メタ情報を一括ダウンロードします。
+- **update\_shizuku\_logs.py**: しずくのYouTube配信一覧と `logs/youtube/` を動画IDで比較し、未収録分を `dys.cmd` 経由で取得して年別フォルダへ保存します。確認のみは `python tools/scripts/update_shizuku_logs.py`、実更新は末尾に `--apply` を付けます。
 - **anonymize\_chat.py**: ログ内のユーザー名を一方向ハッシュ化し、個人の連続性を保ちながらプライバシーを保護します。
 - **srt\_to\_sbv.py**: 字幕の不要タグを除去しフォーマットを変換します。
 - **censor\_sbv.py**: センシティブなワードや特定のASMR用ワードを自動で伏せ字（●●）に置換します。**（※LLMのセーフティフィルター対策・事前検閲として重要です）**
