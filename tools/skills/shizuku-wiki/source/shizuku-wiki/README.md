@@ -37,7 +37,47 @@ git clone https://github.com/<your-account>/shizuku-wiki.git ~/.claude/skills/sh
 
 `.skill` ファイルはzip形式なので、拡張子を `.zip` に変えれば中身を直接展開できます。
 
-リポジトリ内では `source/shizuku-wiki/` が編集用の正本、`shizuku-wiki.skill` が再インストール用の配布物です。
+### 動画・配信ページの自動更新
+
+確認処理は公開APIを匿名で読み取ります。承認後の反映に使う認証情報はリポジトリやチャットへ保存せず、次のユーザー環境変数に設定します。
+
+```text
+SHIZUKU_FANDOM_BOT_USERNAME
+SHIZUKU_FANDOM_BOT_PASSWORD
+```
+
+PowerShellでは、値をコマンド履歴へ直接書かないよう次のように設定できます。
+
+```powershell
+$shizukuBotUser = Read-Host "Bot PasswordのUsername"
+$shizukuBotSecure = Read-Host "Bot Password" -AsSecureString
+$shizukuBotPassword = [Net.NetworkCredential]::new("", $shizukuBotSecure).Password
+[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_USERNAME", $shizukuBotUser, "User")
+[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_PASSWORD", $shizukuBotPassword, "User")
+Remove-Variable shizukuBotUser, shizukuBotSecure, shizukuBotPassword
+```
+
+Bot Passwordの `Allowed pages for editing` には `動画・配信` とだけ入力します。これは `{{DISPLAYTITLE:動画・配信}}` ではありません。複数ページを許可する場合は1行に1ページで指定します。
+
+```powershell
+# 認証と対象ページの読み取りだけを確認（編集しない）
+python scripts/update_videos_streams.py auth-check
+```
+
+「wikiの動画・配信ページを更新して」と依頼すると、まず読み取り専用の確認処理で差分案を作ります。その差分を明示的に承認した後だけ反映し、確認後に別の編集が入っていれば競合として停止します。
+
+```powershell
+# ソース取得・YouTube照合・差分案の作成（Wikiは変更しない）
+python scripts/update_videos_streams.py check
+
+# 明示的に必要な場合だけショートも含める
+python scripts/update_videos_streams.py check --include-shorts
+
+# 表示済みの差分をユーザーが承認した後、出力された確認案を指定して実行
+python scripts/update_videos_streams.py apply --plan "outputs/shizuku-wiki/video-streams-r486-xxxxxxxxxxxx.json" --yes
+```
+
+確認案は既定で `outputs/shizuku-wiki/` に基準リビジョンと差分ハッシュを含む名前で保存されます。認証情報はこのファイルへ保存されません。
 
 ---
 
@@ -57,56 +97,6 @@ git clone https://github.com/<your-account>/shizuku-wiki.git ~/.claude/skills/sh
 2. **追加情報を調べる** — 「動画・配信」はYouTubeの配信と通常動画を照合します。ショートは既定で除外します。それ以外は記事本文、動画リスト、ポスト本文などを使います
 3. **差分を受け取る** — 「追記」と「置換」の形で、挿入位置つきで出力されます。この段階ではWikiを編集しません
 4. **明示的に承認する** — 承認後、同じ基準リビジョンであることを再確認してからAPIで反映します。競合時は自動停止します
-
-### 動画・配信ページのAPI設定
-
-Bot Passwordには「Basic rights」「Edit existing pages」を付与し、`Allowed pages for editing` には次の**正式なページ名だけ**を入力します。
-
-```text
-動画・配信
-```
-
-これは本文先頭の `{{DISPLAYTITLE:動画・配信}}` を貼る欄ではありません。複数ページを許可する場合は、カンマ区切りではなく**1行に1ページ**で指定します。
-
-確認処理は公開APIを匿名で読み取るため、認証情報を使いません。承認後の反映に使う認証情報は、チャット、リポジトリ、`.env`、コマンドライン引数へ書かず、Windowsのユーザー環境変数に保存します。
-
-```text
-SHIZUKU_FANDOM_BOT_USERNAME
-SHIZUKU_FANDOM_BOT_PASSWORD
-```
-
-PowerShellでは、値をコマンド履歴へ直接書かないよう次のように設定できます。
-
-```powershell
-$shizukuBotUser = Read-Host "Bot PasswordのUsername"
-$shizukuBotSecure = Read-Host "Bot Password" -AsSecureString
-$shizukuBotPassword = [Net.NetworkCredential]::new("", $shizukuBotSecure).Password
-[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_USERNAME", $shizukuBotUser, "User")
-[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_PASSWORD", $shizukuBotPassword, "User")
-Remove-Variable shizukuBotUser, shizukuBotSecure, shizukuBotPassword
-```
-
-設定後はCodexを再起動し、新しいプロセスへ環境変数を反映してください。スクリプトは値を表示しません。
-
-```powershell
-# 認証と対象ページの読み取りだけを確認（編集しない）
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
-```
-
-確認と反映は意図的に別コマンドです。
-
-```powershell
-# ソース取得・YouTube照合・差分案の作成（Wikiは変更しない）
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py check
-
-# 明示的に必要な場合だけショートも含める
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py check --include-shorts
-
-# 表示済みの差分をユーザーが承認した後、出力された確認案を指定して実行
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py apply --plan "outputs/shizuku-wiki/video-streams-r486-xxxxxxxxxxxx.json" --yes
-```
-
-確認案は既定で `outputs/shizuku-wiki/` に基準リビジョンと差分ハッシュを含む名前で保存されます。このファイルはGit管理外です。反映前にはページのリビジョンと本文ハッシュを再検証し、確認後に別の編集が入っていた場合は何も変更せず終了します。
 
 ---
 
