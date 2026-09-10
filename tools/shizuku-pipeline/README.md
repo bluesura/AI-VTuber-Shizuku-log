@@ -28,8 +28,9 @@ python scripts/doctor.py                      # データ健診
 less data/review/RV_20260808-01.md             # レビューパケットのデモ（記入済み）
 less data/handoff/handoff_RV_20260808-01.txt   # wiki起草チャットへの受け渡し（デモ）
 ```
-新しい配信が来たら: `s0_intake → s1_normalize → s2_pack → (Claude) → s2_ingest → s3 → s4 → 試聴チェック → s5`。
-まとめて処理するときは `python scripts/s2_pack.py --all`（作業リスト `data/packs/WORKLIST.md` が作られます）。
+新しい配信が来たら: `s0_intake → s1_normalize → s2_pack → (Claude) → s2_batch → s3_match → s4_packet → 試聴チェック → s5_apply`。
+まとめて処理するときは `python scripts/s2_pack.py --all` でパック生成 → 各パックをClaudeへ → `python scripts/s2_batch.py --apply` で一括取込。
+**大量データは区切って進めます**: 照合は `s3_match --until <日付>`、レビューは `s4_packet --kinds event --until <日付>` のように月・種別で分割（詳細はMANUAL §Step3/Step4）。
 詳細は MANUAL.md へ。
 
 ## 同梱の実データ処理結果
