@@ -65,7 +65,7 @@
 - [パイプライン仕様](../shizuku-pipeline/docs/SPEC.md)
 - [パイプライン手順書](../shizuku-pipeline/MANUAL.md)
 
-パイプライン配下の作業では、同ディレクトリの `AGENTS.md` と `CLAUDE.md` に従う。既存のレビュー・台帳の状態を変更するコマンドを、単なる下見で実行しない。
+パイプライン配下の作業では、同ディレクトリの `AGENTS.md` に従い、`docs/ARCHITECTURE.md` と `docs/SPEC.md` を確認する。既存のレビュー・台帳の状態を変更するコマンドを、単なる下見で実行しない。
 
 ## 4. 提案したデータの組み立て方
 

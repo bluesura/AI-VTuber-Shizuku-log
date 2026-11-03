@@ -14,7 +14,7 @@ Wikiの編集をLLMに手伝わせると、日付の書き方が毎回違った�
 
 - **どのページに何を書くか**の振り分け
 - **日付・出典・MediaWiki記法**の共通ルール
-- **ページごとの更新手順**（6ページ分）
+- **既存ページの更新手順と企画記事の新規作成**
 - **トーン・文体**のガイド
 - **日英翻訳**の語彙集
 - **モニタリング**の運用手順
@@ -23,21 +23,11 @@ Wikiの編集をLLMに手伝わせると、日付の書き方が毎回違った�
 
 ## インストール
 
-### Codex / Claude.ai / Claude Desktop
+このリポジトリでは `source/shizuku-wiki/SKILL.md` を直接読んで使えます。グローバルにインストール済みとは仮定しません。
 
-`shizuku-wiki.skill` をダウンロードし、チャットに添付して「Save skill」を押します。
+別の環境へ持ち込む場合は `shizuku-wiki.skill` を利用します。zip形式のため展開でき、展開した `shizuku-wiki/` を利用環境のスキル配置手順に従って導入します。
 
-### Claude Code
-
-スキルフォルダを配置します。
-
-```bash
-git clone https://github.com/<your-account>/shizuku-wiki.git ~/.claude/skills/shizuku-wiki
-```
-
-`.skill` ファイルはzip形式なので、拡張子を `.zip` に変えれば中身を直接展開できます。
-
-リポジトリ内では `source/shizuku-wiki/` が編集用の正本、`shizuku-wiki.skill` が再インストール用の配布物です。
+編集用の正本は `source/shizuku-wiki/`、配布物は `shizuku-wiki.skill` です。更新時はREADMEの2コピーを揃え、配布物を再生成します。Wiki本文や一時的な実行スクリプトを配布物へ入れません。
 
 ---
 
@@ -53,14 +43,32 @@ git clone https://github.com/<your-account>/shizuku-wiki.git ~/.claude/skills/sh
 
 ### 作業の流れ
 
-1. **現在のwikiソースを確認する** — 「動画・配信」はMediaWiki APIから自動取得します。それ以外のページは、取得できない場合にソースの貼り付けを依頼します
-2. **追加情報を調べる** — 「動画・配信」はYouTubeの配信と通常動画を照合します。ショートは既定で除外します。それ以外は記事本文、動画リスト、ポスト本文などを使います
-3. **差分を受け取る** — 「追記」と「置換」の形で、挿入位置つきで出力されます。この段階ではWikiを編集しません
-4. **明示的に承認する** — 承認後、同じ基準リビジョンであることを再確認してからAPIで反映します。競合時は自動停止します
+1. **現在のwikiソースを確認する** — API等で取得し、取得できない場合に貼り付けを依頼します。新規記事では正式名称と未作成を確認します
+2. **一次資料を調べる** — 本編の字幕・説明欄・公式チャットを確認し、連続企画では必要に応じて振り返り・総集編・公式発表も調べます。「動画・配信」の自動照合ではショートは既定で除外します
+3. **差分を確認する** — 既存ページは挿入位置つきの追記・置換、新規ページは本文全量を示します。変更後の節全体も読み、文体と前後の文脈を確認します。この段階ではWikiを編集しません
+4. **明示的に承認する** — 承認後、既存ページのリビジョン・本文、または新規ページの未作成状態を再確認してAPIで反映します。承認時に指定された修正も反映し、同じ公開承認を取り直しません。競合等で範囲が変われば再確認します
+5. **公開結果を確認する** — 保存本文・出典・リンク・カテゴリを確認し、公開リビジョンと未完了事項を報告します。出典のアーカイブ保存は、成功・失敗・未実施を区別します
 
-### 動画・配信ページのAPI設定
+記事作成の詳しい手順は、正本内の `references/article-workflow.md` を参照してください。終了した企画では当時の参加方法と現在の視聴を、記憶についての語りでは本人の説明と公開されたサービス仕様を区別します。
 
-Bot Passwordには「Basic rights」「Edit existing pages」を付与し、`Allowed pages for editing` には次の**正式なページ名だけ**を入力します。
+`scripts/update_videos_streams.py` の反映機能は「動画・配信」専用です。他ページと新規記事は対象ページを限定したAPI処理で扱い、同スクリプトのページ名を書き換えて転用しません。
+
+### Fandom Wikiの認証・API設定
+
+以下のコマンド例はGitHubリポジトリのルートで実行します。スキルを単独展開して使う場合は、スキルフォルダで `tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/` を `scripts/` と読み替えてください。確認案の `outputs/shizuku-wiki/` は実行時のカレントディレクトリが基準です。
+
+#### 1. BotPasswordを作成・管理する
+
+Shizuku Wikiへログインし、[BotPassword管理画面](https://shizuku.fandom.com/wiki/Special:BotPasswords) を開きます。通常のFandomログインパスワードとは別の、API用のパスワードです。
+
+BotPasswordの操作権限と対象ページの許可は、両方必要です。
+
+| 作業 | 付与する権限 |
+|---|---|
+| 既存ページの編集 | `Basic rights` と `Edit existing pages` |
+| 新規ページの作成 | 上記に追加して `Create, edit, and move pages` |
+
+`Allowed pages for editing` には、作業対象の**正式なページ名だけ**を1行ずつ入力します。次は「動画・配信」だけを扱う場合の例です。
 
 ```text
 動画・配信
@@ -68,29 +76,134 @@ Bot Passwordには「Basic rights」「Edit existing pages」を付与し、`All
 
 これは本文先頭の `{{DISPLAYTITLE:動画・配信}}` を貼る欄ではありません。複数ページを許可する場合は、カンマ区切りではなく**1行に1ページ**で指定します。
 
-確認処理は公開APIを匿名で読み取るため、認証情報を使いません。承認後の反映に使う認証情報は、チャット、リポジトリ、`.env`、コマンドライン引数へ書かず、Windowsのユーザー環境変数に保存します。
+別のページを追加するときは、既存の行と権限を残し、対象名（例：`ファン活動`、`しずくのなつやすみ`）を追加して保存します。権限変更後に再認証して許可を確認します。権限の追加だけなら、パスワードの再発行を前提としません。
+
+認証に成功しても、特定ページを編集できるとは限りません。
+
+| APIの結果 | 確認する設定 |
+|---|---|
+| `session-page-restricted` | `Allowed pages for editing` の対象名 |
+| `cantcreate` / `createpage` 権限なし | 新規作成の操作権限 |
+| 読み取り成功、編集・作成不可 | 対象ページの許可と操作権限の両方 |
+
+設定変更はユーザーが管理画面で行います。エージェントは必要な項目を具体的に伝え、認証情報の値を送らせません。権限名の参照：[MediaWiki公式資料](https://www.mediawiki.org/wiki/Manual:Huggle/Bot_passwords)。
+
+記録するUsernameは発行画面の完全な `アカウント名@ボット名` 形式です（例：`YourName@BotName`）。通常のアカウント名だけでは認証できません。
+
+#### 2. Windowsユーザー環境変数へ登録する
+
+Windows TerminalまたはPowerShellを、Wikiを更新するAI・開発ツールと同じWindowsユーザーで通常起動します。`User` への登録なので、管理者権限は不要です。
+
+承認後の反映に使う認証情報は、チャット、リポジトリ、`.env`、コマンドライン引数へ書かず、次のWindowsユーザー環境変数に保存します。
 
 ```text
 SHIZUKU_FANDOM_BOT_USERNAME
 SHIZUKU_FANDOM_BOT_PASSWORD
 ```
 
-PowerShellでは、値をコマンド履歴へ直接書かないよう次のように設定できます。
+次をまとめて実行すると、UsernameとPasswordを順番に入力できます。パスワードは非表示で読み込み、実値をコマンドへ直書きしないため、コマンド履歴へ残しません。空の入力では既存の登録を消さず停止します。
 
 ```powershell
-$shizukuBotUser = Read-Host "Bot PasswordのUsername"
+$shizukuBotUser = Read-Host "Bot Username (YourName@BotName)"
 $shizukuBotSecure = Read-Host "Bot Password" -AsSecureString
-$shizukuBotPassword = [Net.NetworkCredential]::new("", $shizukuBotSecure).Password
-[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_USERNAME", $shizukuBotUser, "User")
-[Environment]::SetEnvironmentVariable("SHIZUKU_FANDOM_BOT_PASSWORD", $shizukuBotPassword, "User")
-Remove-Variable shizukuBotUser, shizukuBotSecure, shizukuBotPassword
+$shizukuBotBstr = [IntPtr]::Zero
+try {
+    if ([string]::IsNullOrWhiteSpace($shizukuBotUser) -or $shizukuBotSecure.Length -eq 0) {
+        throw "UsernameとPasswordは両方入力してください。"
+    }
+    $shizukuBotBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($shizukuBotSecure)
+    [Environment]::SetEnvironmentVariable(
+        "SHIZUKU_FANDOM_BOT_USERNAME", $shizukuBotUser, "User"
+    )
+    [Environment]::SetEnvironmentVariable(
+        "SHIZUKU_FANDOM_BOT_PASSWORD",
+        [Runtime.InteropServices.Marshal]::PtrToStringBSTR($shizukuBotBstr),
+        "User"
+    )
+    Write-Host "登録完了"
+}
+finally {
+    if ($shizukuBotBstr -ne [IntPtr]::Zero) {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($shizukuBotBstr)
+    }
+    if ($null -ne $shizukuBotSecure) { $shizukuBotSecure.Dispose() }
+    Remove-Variable shizukuBotUser, shizukuBotSecure, shizukuBotBstr -ErrorAction SilentlyContinue
+}
 ```
 
-設定後はCodexを再起動し、新しいプロセスへ環境変数を反映してください。スクリプトは値を表示しません。
+#### 3. 値を表示せず登録を確認する
+
+PowerShellを開き直し、保存先の `User` を直接確認します。実値を出力せず、両方が `登録済み` と表示されれば登録完了です。
+
+```powershell
+$shizukuBotNames = @(
+    "SHIZUKU_FANDOM_BOT_USERNAME",
+    "SHIZUKU_FANDOM_BOT_PASSWORD"
+)
+try {
+    foreach ($shizukuBotName in $shizukuBotNames) {
+        $shizukuBotValue = [Environment]::GetEnvironmentVariable($shizukuBotName, "User")
+        $shizukuBotState = if ([string]::IsNullOrEmpty($shizukuBotValue)) { "未登録" } else { "登録済み" }
+        Write-Host "$shizukuBotName : $shizukuBotState"
+    }
+}
+finally {
+    Remove-Variable shizukuBotNames, shizukuBotName, shizukuBotValue, shizukuBotState -ErrorAction SilentlyContinue
+}
+```
+
+`$env:SHIZUKU_FANDOM_BOT_PASSWORD` や `Get-ChildItem Env:` の全件出力など、実値が表示される確認方法は使いません。
+
+#### 4. AI・開発ツールへ反映する
+
+起動済みのCodex等には、登録前の環境が残る場合があります。利用するツールを再起動し、その新しいプロセスから認証処理を実行します。古い親プロセスから子のPowerShellを開き直すだけでは、更新されない場合があります。
+
+ツールへは、実値を含めず次のように伝えます。
+
+```text
+Shizuku FandomのBotPasswordをWindowsユーザー環境変数（User）へ登録しました。
+- SHIZUKU_FANDOM_BOT_USERNAME
+- SHIZUKU_FANDOM_BOT_PASSWORD
+新しく起動したプロセスから参照して認証してください。
+認証情報の値をチャットやログへ出力する必要はありません。
+```
+
+再起動せず現在のPowerShellから認証する場合は、保存済みの `User` の値をそのシェルの `Process` 環境へ明示的に読み込みます。下の例は認証確認後に一時的なプロセス設定を削除します。複数のコマンドを続ける場合は、必要な処理を同じ `try` 内で実行してください。永続設定は変更しません。
+
+```powershell
+$shizukuBotNames = @(
+    "SHIZUKU_FANDOM_BOT_USERNAME",
+    "SHIZUKU_FANDOM_BOT_PASSWORD"
+)
+try {
+    foreach ($shizukuBotName in $shizukuBotNames) {
+        $shizukuBotValue = [Environment]::GetEnvironmentVariable($shizukuBotName, "User")
+        if ([string]::IsNullOrEmpty($shizukuBotValue)) {
+            throw "$shizukuBotName が未登録です。"
+        }
+        [Environment]::SetEnvironmentVariable($shizukuBotName, $shizukuBotValue, "Process")
+    }
+    python -X utf8 tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
+    if ($LASTEXITCODE -ne 0) { throw "Fandomの認証確認に失敗しました。" }
+    # 承認後の反映なども、このtry内で実行する。
+}
+finally {
+    foreach ($shizukuBotName in $shizukuBotNames) {
+        [Environment]::SetEnvironmentVariable($shizukuBotName, $null, "Process")
+    }
+    Remove-Variable shizukuBotNames, shizukuBotName, shizukuBotValue -ErrorAction SilentlyContinue
+}
+```
+
+2026-11-01の更新では、この `User` から `Process` への読み込みで認証・編集に成功しました。スクリプトは `Process` の環境変数を読み、Windowsの永続設定を直接読みに行くものではありません。
+
+#### 5. 「動画・配信」の認証確認・差分作成・反映
+
+親ツールを再起動した新しいプロセスで実行します。再読み込み方式を使う場合は、以下のうち必要なコマンドを上記 `try` 内で実行します。`auth-check` は「動画・配信」の認証と読み取りだけで、他ページの編集・作成権限やWikiの更新までは確認しません。
 
 ```powershell
 # 認証と対象ページの読み取りだけを確認（編集しない）
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
+python -X utf8 tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
 ```
 
 確認と反映は意図的に別コマンドです。
@@ -107,6 +220,17 @@ python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_strea
 ```
 
 確認案は既定で `outputs/shizuku-wiki/` に基準リビジョンと差分ハッシュを含む名前で保存されます。このファイルはGit管理外です。反映前にはページのリビジョンと本文ハッシュを再検証し、確認後に別の編集が入っていた場合は何も変更せず終了します。
+
+#### 6. パスワードを忘れた・認証に失敗する場合
+
+- 変数が未登録なら、同じWindowsユーザーの `User` に登録されているかを確認します。アクセス制限で保存先を読めない場合は、未登録とは区別して扱います。
+- 通常のアカウント名だけを登録していた場合は、発行画面の完全な `YourName@BotName` へ修正します。`authmanager-authn-no-primary` はこの指定違いでも発生します。
+- パスワードを紛失した場合は管理画面で既存のボット名を選び、`Reset password` にチェックして `Update` から再発行します。発行済みの文字列を再表示する方法として扱いません。
+- 再発行後は、この手順でユーザー環境変数を更新し、同じBotPasswordを使う他のツールも更新します。その後に再起動または再読み込みを行い、`auth-check` で確認します。
+
+ユーザー環境変数は永続保存されますが、暗号化された秘密情報ストアではありません。同じWindowsユーザー権限のプログラムから読み取れるため、共有PC等では取り扱いに注意してください。非表示入力やBSTRの解放は、保存先の暗号化を意味しません。
+
+参照：[MediaWikiのBotPassword管理・再発行](https://www.mediawiki.org/wiki/Manual:Bot_passwords/en)、[Microsoftのユーザー環境変数の保存・継承仕様](https://learn.microsoft.com/en-us/dotnet/api/system.environment.setenvironmentvariable)。
 
 ---
 
@@ -128,6 +252,7 @@ shizuku-wiki/
     ├── page-media-coverage.md        メディア露出
     ├── page-fan-activities.md        ファン活動
     ├── page-official-links.md        公式リンク
+    ├── article-workflow.md           記事調査・文脈確認・新規作成・公開確認
     └── monitoring-runbook.md         モニタリング運用手順
 ```
 
@@ -157,7 +282,7 @@ shizuku-wiki/
 
 ## ライセンス
 
-[MIT License](LICENSE)。改変・再配布・商用利用いずれも自由です。
+MIT License。改変・再配布・商用利用いずれも自由です。ライセンス本文は編集用の正本と配布スキルに含まれる `LICENSE` を参照してください。
 
 スキル本体のみが対象で、しずくWikiの記事本文（CC BY-SA）、および「しずく」に関する権利は対象外です。詳細は LICENSE 末尾に記載しています。
 

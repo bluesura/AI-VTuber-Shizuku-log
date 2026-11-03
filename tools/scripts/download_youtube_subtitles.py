@@ -24,6 +24,7 @@ YouTube テキストデータダウンローダー (Subtitle / Chat / Comment)  
   --keep-dup-subs          自動字幕の重複行を除去しない
   --keep-intermediate      中間ファイル(.vtt/.json)を削除せず残す
   --skip-existing          既に処理済みならスキップ
+  --no-transcribe          字幕なし動画のspeech.cpp文字起こしを行わない
   --cookies-from-browser B 会員限定/年齢制限動画用（chrome, firefox, edge ...）
   --sleep SEC              動画1本ごとの待機秒数（既定: 1.0）
 
@@ -796,7 +797,7 @@ def process_video(url: str, session_dir: Path, args, anon: Anonymizer) -> bool:
     if not args.no_chat:
         sub_langs = f"{sub_langs},live_chat"
 
-    run_cmd(
+    subtitle_result = run_cmd(
         common + [
             "--write-subs", "--write-auto-subs",
             "--sub-langs", sub_langs,
@@ -872,7 +873,15 @@ def process_video(url: str, session_dir: Path, args, anon: Anonymizer) -> bool:
         else:
             print("    [WARN] info.json が見つからないためコメント抽出をスキップ")
 
-    # ── 5. 完了サマリ ─────────────────────────────────────
+    # ── 5. 字幕のない配信の文字起こし ──────────────────────
+    from transcribe_youtube import has_subtitles, transcribe_video
+    if not args.no_transcribe and not has_subtitles(video_dir, video_id):
+        # 通信エラー等による未取得を「字幕なし」と誤判定しない。
+        if subtitle_result.returncode != 0:
+            raise RuntimeError("字幕取得に失敗したため、字幕の有無を確定できません。再取得してください。")
+        transcribe_video(video_dir, video_id)
+
+    # ── 6. 完了サマリ ─────────────────────────────────────
     print(f"\n  {'─'*40}")
     print(f"  [{title_raw}] 保存されたファイル:")
     for f in sorted(video_dir.glob(f"{glob_escape(base_name)}*")):
@@ -944,6 +953,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--keep-dup-subs", action="store_true", help="自動字幕の重複行を除去しない")
     p.add_argument("--keep-intermediate", action="store_true", help="中間ファイルを残す")
     p.add_argument("--skip-existing", action="store_true", help="処理済みならスキップ")
+    p.add_argument("--no-transcribe", action="store_true", help="字幕なし動画のspeech.cpp文字起こしを行わない")
     p.add_argument("--cookies-from-browser", metavar="BROWSER",
                    help="会員限定/年齢制限動画用（chrome, firefox, edge ...）")
     p.add_argument("--sleep", type=float, default=1.0, help="動画1本ごとの待機秒数")
