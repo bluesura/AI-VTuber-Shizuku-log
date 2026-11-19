@@ -16,7 +16,7 @@
 ## 正本と配布物
 
 - `source/shizuku-wiki/` が編集用の正本です。
-- `shizuku-wiki.skill` は正本をzip形式でまとめた再インストール用配布物です。アーカイブを直接編集しません。
+- `shizuku-wiki-v3.skill` は正本をZIP形式でまとめた現行の再インストール用配布物です。アーカイブを直接編集せず、新しい版は別名で保存します。
 - `README.md` はリポジトリ上の利用案内です。正本内にも同内容のREADMEがあるため、変更時は不一致を残さないでください。
 - Codexが実行時に読むインストール済みコピーは、通常 `%USERPROFILE%\.codex\skills\shizuku-wiki\` にあります。正本を変更した場合は、検証後にパッケージを作り直し、必要に応じてインストール済みコピーも同期します。
 - ローカル絶対パス、認証情報、トークンを配布物や追跡ファイルへ入れません。
@@ -88,6 +88,7 @@ SHIZUKU_FANDOM_BOT_PASSWORD
 $shizukuSkillCreatorRoot = Join-Path $env:USERPROFILE ".codex\skills\.system\skill-creator"
 python -X utf8 "$shizukuSkillCreatorRoot\scripts\quick_validate.py" tools\skills\shizuku-wiki\source\shizuku-wiki
 python -X utf8 -m unittest tools.skills.shizuku-wiki.source.shizuku-wiki.scripts.test_update_videos_streams
+python -X utf8 -m unittest discover -s tools/skills/shizuku-wiki/source/shizuku-wiki/scripts -p "test_editorial_pipeline.py"
 python -X utf8 -m unittest discover -s tools/skills/shizuku-wiki/video-duration-collector/scripts -p "test_*.py"
 python -m compileall -q tools/skills/shizuku-wiki/source/shizuku-wiki/scripts tools/skills/shizuku-wiki/video-duration-collector/scripts
 git diff --check
@@ -100,4 +101,5 @@ git status --short
 
 - 外側のREADMEと `source/shizuku-wiki/README.md` の内容を揃え、正本を更新したら `.skill` も再生成します。
 - パッケージには `source/shizuku-wiki/` の配布対象のみを入れます。`__pycache__`、`.pyc`、調査資料、認証情報を含めず、正本のファイルと内容が一致することを検証します。
+- 年表の審査を変更したら、形式警告のない文でも、記録なし・保留・本文変更で `audit` が失敗することを確認します。yomiyasuを差し替えたら展開した配布物のCLIで `--version`、`run`、`verify` を確認します。
 - 既存の未コミット変更や、ログ収集・ASR等に由来する差分を取り消しません。グローバルなスキル配置は環境依存なので、リポジトリ内の更新だけで同期済みと報告しません。
