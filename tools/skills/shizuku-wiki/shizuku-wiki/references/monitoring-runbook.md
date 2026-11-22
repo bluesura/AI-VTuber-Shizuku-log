@@ -99,27 +99,45 @@ Fandomの通常ページは外部の本文取得で402になる場合がある�
 
 ### 作成用のwikitext
 
-`Template:出典希望` を新規作成し、次を貼る。
+`Template:出典希望`（日英両対応）
 
 ```
-<sup>[''要出典'']</sup><includeonly>[[Category:出典が必要なページ]]</includeonly><noinclude>
-事実の記述に出典が付いていない箇所に貼ります。使い方: <nowiki>{{出典希望}}</nowiki>
+<sup>[''{{#ifeq:{{{lang|}}}|en|citation needed|要出典}}'']</sup><includeonly>[[Category:出典が必要なページ]]</includeonly><noinclude>
+事実の記述に出典が付いていない箇所に貼ります。使い方: <nowiki>{{出典希望}}</nowiki>（英語ページ: <nowiki>{{出典希望|lang=en}}</nowiki>）
 </noinclude>
 ```
 
-`Template:時点情報`
+`Template:時点情報`（日英両対応）
 
 ```
-<small>（{{{1|}}}時点）</small><includeonly>[[Category:時点情報を含むページ]]</includeonly><noinclude>
-時間とともに変わる値に貼ります。使い方: <nowiki>{{時点情報|2026-07-31}}</nowiki>
+<small>{{#ifeq:{{{lang|}}}|en|(as of {{{1|}}})|（{{{1|}}}時点）}}</small><includeonly>[[Category:時点情報を含むページ]]</includeonly><noinclude>
+時間とともに変わる値に貼ります。使い方: <nowiki>{{時点情報|2026-07-31}}</nowiki>（英語ページ: <nowiki>{{時点情報|2026-07-31|lang=en}}</nowiki>）
 </noinclude>
 ```
 
-`Template:考察`（新規作成時の例。既設の場合は現行の定義を確認する。）
+`Template:考察`（日英両対応）
 
 ```
-{{#if:{{{1|}}}|<span>〔考察〕{{{1}}}</span>|<div style="border-left:3px solid #ccc; padding-left:0.6em;">''以下は考察です。''</div>}}<includeonly>[[Category:考察を含むページ]]</includeonly><noinclude>
-見立ては <nowiki>{{考察|考察文}}</nowiki> で文中に示します。長い考察を独立させるときは、その段落の前に <nowiki>{{考察}}</nowiki> を置きます。
+<includeonly>{{#if:{{{1|}}}|<span style="background-color:rgba(128,128,128,0.14); padding:0.08em 0.2em; border-radius:2px;" title="{{#ifeq:{{{lang|}}}|en|Editorial note|編集者による考察}}"><small>{{#ifeq:{{{lang|}}}|en|[Editorial Note]|［考察］}}</small> {{{1}}}</span>|<div style="border-left:3px solid #ccc; padding-left:0.6em;">''{{#ifeq:{{{lang|}}}|en|The following is an editorial note.|以下は考察です。}}''</div>}}[[Category:考察を含むページ]]</includeonly><noinclude>
+== 使い方 ==
+このテンプレートは、編集者による考察・推測・解釈を、通常の記事本文と区別するために使用します。
+
+=== 1. 従来型（開始位置の表示） ===
+<nowiki>{{考察}}</nowiki>（英語ページ: <nowiki>{{考察|lang=en}}</nowiki>）
+
+「以下は考察です。」（英語版: ''The following is an editorial note.''）という注意書きを表示します。従来の表示形式は変更されません。
+
+=== 2. インライン型（推奨） ===
+<nowiki>{{考察|ここに考察を書く。}}</nowiki>（英語ページ: <nowiki>{{考察|Editorial note text.|lang=en}}</nowiki>）
+
+考察部分だけに淡い背景色を付け、冒頭に「［考察］」（英語版: [Editorial Note]）ラベルを表示します。
+前後に改行を入れる必要はありません。
+
+=== 3. 注意事項 ===
+* どちらの形式でも「考察を含むページ」カテゴリに自動登録されます。
+* インライン型は短い文章や補足的な考察に適しています。
+* 考察内に半角の「=」を含む場合は、<nowiki>{{考察|1=文章}}</nowiki> の形式を使用してください。
+* 考察内に半角の「|」を含む場合は、<nowiki>{{!}}</nowiki> などで適切に処理してください。
 </noinclude>
 ```
 

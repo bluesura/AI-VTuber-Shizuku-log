@@ -1,3 +1,15 @@
+# v3.1.13
+
+- `SKILL.md` §0-3 に、複数ページや長大ページの一括全文出力時は、URL・記法検証済みの `.wikitext` ファイル一式を `.zip` で提示できる例外を追記。
+- `SKILL.md` §8 および `references/translation-guide.md` §3 を更新し、`Shizuku Lab` の英語版ページ名を `Shizuku Lab (EN)`（`{{DISPLAYTITLE:Shizuku Lab}}`・内部リンクは `[[Shizuku Lab (EN)|Shizuku Lab]]`）として確定。
+- `SKILL.md` §8 および `references/translation-guide.md` §3 に、`編集者の方へ` は人的リソースおよび英語側単独編集による上書き防止のため当面日本語のみで維持し、英語ページからは `[[編集者の方へ]]` で参照する方針を明記。
+
+# v3.1.12
+
+- `references/translation-guide.md` §2 の `[[Shizuku]]` 未合意見出し5件を「合意済」へ更新し、`ご主人様と育つしずく` を `Shizuku & Goshujin-sama: Growing Together` とした意図（見出しで性別的表現を前景化せず、しずくとご主人様を対等に並べる方針）を明記。
+- `references/translation-guide.md` §4・§6・§7 に、新出の固有名詞（`Luhca Azai`、`Clear Usui`、`Tsumugi Nen`、`852wa`、`Mana Kanaka`、`Shizuku ID`、`Shizuku-Duplex` 等）、英語数値表記、英語 `<ref>` 書式、新見出し・表ヘッダ語彙（`X (Tech)` 等）を追記。
+- `SKILL.md` §3-5・§8、`references/translation-guide.md` §3、`references/monitoring-runbook.md` §4 を更新し、`Timeline`・`Media Coverage` の実在状況を同期するとともに、メンテナンステンプレート3種（`{{出典希望}}`・`{{時点情報}}`・`{{考察}}`）の `lang=en` 分岐仕様を追加。
+
 # v3.1.11
 
 - `references/page-videos-streams.md` に、ショート動画（`/shorts`）の例外掲載基準（独自企画や1000万〜1億再生規模の注目作）、`== 配信状況 ==` 本数行への `{{時点情報|YYYY-MM-DD}}` 1箇所付与ルール、および案内ブロック（タグの見方・ページ内移動・主なシリーズ企画）・2023-01-19初期テスト配信の保護方針を追記。

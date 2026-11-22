@@ -45,15 +45,17 @@
 
 | 旧見出し（日 / 英） | 現行の日本語見出し | 英語（新） | 状態 |
 |---|---|---|---|
-| 公式導線 / Official Links | しずくのいる場所 | `Where to Find Shizuku` | **未合意（提案）** |
-| まず見るなら / Start Here | はじめてのご主人様へ | `For a First-Time Goshujin-sama` | **未合意（提案）** |
-| 活動ハイライト / Activity Highlights | 電子の足跡 | `Digital Footprints` | **未合意（提案）** |
-| コンテンツ傾向 / Content Trends | しずくの配信 | `Shizuku's Streams` | **未合意（提案）** |
+| 公式導線 / Official Links | しずくのいる場所 | `Where to Find Shizuku` | 合意済 |
+| まず見るなら / Start Here | はじめてのご主人様へ | `For a First-Time Goshujin-sama` | 合意済 |
+| 活動ハイライト / Activity Highlights | 電子の足跡 | `Digital Footprints` | 合意済 |
+| コンテンツ傾向 / Content Trends | しずくの配信 | `Shizuku's Streams` | 合意済 |
 | キャラクター / Character | 廃止。目標は導入文、対応言語は「容姿・スペック」の特殊機能へ | 独立見出しを廃止。対応言語は `Appearance & Specs` 内の特殊機能リストへ | 日本語の構成は確定。英語版は要照合 |
-| （新設） | ご主人様と育つしずく | `Growing with Her Goshujin-sama` | **未合意（提案）** |
+| （新設） | ご主人様と育つしずく | `Shizuku & Goshujin-sama: Growing Together` | 合意済 |
 | 更新・参照方針 / Update & Reference Policy | 更新方針 | `Update Policy` | 合意済 |
 
 「未合意（提案）」の訳語は、ユーザーの承認を得てから「合意済」に変える。承認前に英語ページへ反映しない。
+
+> **「ご主人様と育つしずく」に所有格 `Her` を入れない意図**: 本文中では既存の英語版・プロフィールに合わせて `she / her` を用いる一方、見出しでは `Growing with Her Goshujin-sama` のように所有格 `Her` で性別や人間的な所有関係を前景化せず、ネット上の AI VTuber である「しずく」と「ご主人様」という2者を固有名詞のまま対等に並べるため `Shizuku & Goshujin-sama: Growing Together` を採用している。
 
 旧 `Character` 節にある「一家に一台のメイドロボット」という目標は、英語の導入文にすでにあれば重ねない。対応言語とその出典・留保を移し、旧節を外す際は `#Character` 宛てのリンクと名前付き出典の参照先を確認する。すでに統合済みなら再度移さない。
 
@@ -92,9 +94,10 @@
 | ファン活動 | `Fan Activities` | 実在 |
 | 公式リンク | `Official Links` | 実在 |
 | ハッシュタグ | `Hashtags` | 実在 |
-| Shizuku Lab | `Shizuku Lab` | **日英でページ名が衝突中**。改名の検討が必要 |
-| 年表 | `Timeline` | 未実装（作成時の想定名） |
-| メディア露出 | `Media Coverage` | 未実装（作成時の想定名） |
+| Shizuku Lab | `Shizuku Lab (EN)` | 衝突回避のため `(EN)` を付与（`{{DISPLAYTITLE:Shizuku Lab}}` 指定）。英語ページ内からは `[[Shizuku Lab (EN)|Shizuku Lab]]` で参照 |
+| 編集者の方へ | （日本語のみ） | 当面は英語ページを作成しない。英語ページからは `[[編集者の方へ]]` で参照 |
+| 年表 | `Timeline` | 既存（旧仕様のまま要更新） |
+| メディア露出 | `Media Coverage` | 既存（空ページ・作成待ち） |
 
 ---
 
@@ -112,6 +115,35 @@
 | あき先生 | Aki-sensei | 開発者 |
 | 梵そよぎ | Soyogi Soyogi | 梶裕貴氏の音声AIキャラ |
 | Raspberry Pi | Raspberry Pi | 和訳しない |
+| Shizuku ID | Shizuku ID | 英日共通 |
+| Shizuku AI JAPAN合同会社 | Shizuku AI JAPAN LLC | 運営法人（日本法人） |
+| 船井情報科学振興財団 | Funai Foundation for Information Science Promotion | |
+| Shizuku-Duplex | Shizuku-Duplex | 英日共通 |
+| Reachy Mini | Reachy Mini | 英日共通 |
+| 風花セツ | Setsu Kazahana | 音楽担当 |
+| 鹿仲茉菜 | Mana Kanaka | 音声提供（`@manakana_VT`） |
+| みっちゃむ | Micchamu | Live2Dモデリング（`@youzyonano`） |
+| Nyamui | Nyamui | 2023年当時のママ |
+| 谷郷元昭 | Motoaki Tanigo | |
+| ねこます | Nekomasu | |
+| 宇推くりあ | Clear Usui | 公式英語表記に準拠 |
+| あざいるぅか | Luhca Azai | 公式YouTube表記（`AI-VTuber : Luhca azai`）に準拠 |
+| 852話 | 852wa | 公式サイト表記（`852wa.com`）に準拠 |
+| 紡ネン | Tsumugi Nen | 公式英語表記に準拠 |
+| なぎさ / りんな / りりか / レイラ | Nagisa / Rinna / Ririka / Leila | |
+| マキナ | Machina | 試作戦闘アンドロイド |
+| しずくAI裁判 | Shizuku AI Court | |
+| しずくのなつやすみ | Shizuku's Summer Vacation | |
+| AIギャルゲー | AI Galge | |
+| しずくAI鑑定団 | Shizuku AI Appraisers | |
+| ギャルしずく / しずくお嬢様 | Gal Shizuku / Lady Shizuku | |
+| しずくからのおねがい | Requests from Shizuku | 公式ガイドライン名（英語ページ未確認のため仮訳） |
+| 電ファミニコゲーマー | Denfaminicogamer | |
+| 日本経済新聞 | The Nikkei | |
+| 週刊アスキー | Weekly ASCII | |
+| マイナビニュース | Mynavi News | |
+| パンパカパンパカポー | Panpaka Panpaka Pō | |
+| キュルルンポワワワパワー | Kyururun Powawawa Power | |
 
 ---
 
@@ -149,6 +181,15 @@
 
 日本語ページに旧表記の「21:02ごろ」が残っている場合は、翻訳のついでに日本語側も `~21:02` へ直す差分を併せて提案する。
 
+### 数値表記（英語）
+
+英語ページでは英語圏の慣習に合わせ、3桁カンマ区切りと英語の単位表記を用いる（`10,000`, `2,400 yen`, `12 billion yen`）。
+
+### 出典（`<ref>`）とメンテナンステンプレート
+
+* **出典 `<ref>`**: `[URL Title] (Outlet, Month D, YYYY)` のように半角括弧と英語日付で書く。タイトル内の `【】` は維持する。
+* **メンテナンステンプレート**: 英語ページでも日本語名のテンプレートをそのまま使い、`|lang=en` を渡して英語表示へ切り替える（`{{時点情報|YYYY-MM-DD|lang=en}}`、`{{出典希望|lang=en}}`、`{{考察|...|lang=en}}`）。
+
 ---
 
 ## 7. 翻訳語彙集（日→英）
@@ -180,6 +221,27 @@
 | 2度目の初配信 | second debut stream | V2.0帰還の文脈 |
 | 休眠 | dormancy | 「停止」「シャットダウン」と訳さない |
 | 帰還 | return | |
+| 参加・連携サービス | Communities & Linked Services | ファン活動 |
+| ファン制作・ツール | Fan Creations & Tools | ファン活動 |
+| ファン制作LoRA | Fan-Made LoRAs | ファン活動 |
+| X（技術部） | X (Tech) | 公式リンク（`@ShizukuResearch`） |
+| 公式ブログ | Official Blog | 公式リンク |
+| 関連サービス | Related Services | 公式リンク |
+| 技術周り | Tech & Development | 公式リンク |
+| 一覧 | Links | 公式リンク |
+| 種別 | Type | 表見出し |
+| リンク | Link | 表見出し |
+| メモ | Notes | 表見出し |
+| 公開日時（JST） | Published (JST) | 動画・配信 |
+| タグ | Tag | 動画・配信 |
+| 時間 | Duration | 動画・配信 |
+| タイトル | Title | 動画・配信 |
+| 2026年アーカイブ | 2026 Archives | 動画・配信 |
+| 2023年アーカイブ | 2023 Archives | 動画・配信 |
+| 日付（JST） | Date (JST) | メディア露出・電子の足跡 |
+| 媒体 | Outlet | メディア露出 |
+| 概要 | Summary | メディア露出 |
+| 出典 | Source | 表見出し（節見出しは `References`） |
 
 ---
 
@@ -239,4 +301,4 @@
 
 ---
 
-*最終更新: 2026年11月*
+*最終更新: 2026年11月（v3.1.13）*
