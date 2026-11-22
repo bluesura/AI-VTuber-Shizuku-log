@@ -1,3 +1,9 @@
+# v3.2.3
+
+- `しずく` 本人ページに新見出し `== しずくの観察メモ ==`（15節体制、`== 電子の足跡 ==` と `== クレジット ==` の間）を追加し、`<references />`（`出典`）より前に配置することで出典エラーを防ぐ構成を `references/tone-style-guide.md`・`references/page-shizuku.md` に反映。
+- 最末尾の `== おまけ ==` はあき先生の三面図を置く固定枠として維持する方針を明記。
+- `references/translation-guide.md` §2 に `しずくの観察メモ`（`Shizuku Observation Notes`・未合意提案）を追記。
+
 # v3.2.2
 
 - `references/external-wikis-sync.md` のピクシブ百科事典ルールに、更新確定後の最終出力時に「編集した内容を5字以上250字以内」の硬めな更新報告文をあわせて出力する仕様を追記。
