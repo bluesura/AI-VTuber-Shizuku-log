@@ -1,7 +1,7 @@
 ---
 name: shizuku-wiki
 metadata:
-  version: "3.2.0"
+  version: "3.2.2"
 description: >
   AI VTuber「しずく」のFandom Wiki（shizuku.fandom.com）を編集・更新するスキル。
   「しずくのwikiを更新して」「年表に追加して」「wikiの動画・配信ページを更新して」「動画・配信を最新にして」「メディア露出に記事を足して」

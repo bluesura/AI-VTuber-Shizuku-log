@@ -1,3 +1,11 @@
+# v3.2.2
+
+- `references/external-wikis-sync.md` のピクシブ百科事典ルールに、更新確定後の最終出力時に「編集した内容を5字以上250字以内」の硬めな更新報告文をあわせて出力する仕様を追記。
+
+# v3.2.1
+
+- `references/external-wikis-sync.md` のピクシブ百科事典方針を具体化し、Shizuku Wiki側の硬い文体・過剰な日付で元の「ゆるい読み物」の勢いを上書きしないルール、および日本語圏向け媒体への英語圏向け情報の非混入ルールを明記。
+
 # v3.2.0
 
 - `references/external-wikis-sync.md` を新設し、5媒体（Wikipedia日本語版・ピクシブ百科事典・Virtual YouTuber Wiki・Shizuku Wiki・Grokipedia）の役割分担・ライセンス注意（CC BY-SA 4.0/3.0非互換）・コンフリクト事前確認・双方向更新ワークフローを定義。
