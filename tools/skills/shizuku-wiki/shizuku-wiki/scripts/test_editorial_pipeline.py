@@ -51,6 +51,15 @@ class ReviewPipelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'source has changed'):
             m.apply('しずくは活動した。\n追加しました。',obj,{})
 
+
+    def test_wikitext_lint_hyphen_and_single_newline(self):
+        bad = '- 項目1\n1行目の文です。\n2行目の文です。\n'
+        warnings = m.wikitext_lint(bad)
+        self.assertTrue(any('ハイフン' in w for w in warnings))
+        self.assertTrue(any('通常の改行1つ' in w for w in warnings))
+        good = '* 項目1\n\n1行目の文です。\n\n2行目の文です。\n'
+        self.assertEqual(m.wikitext_lint(good), [])
+
 class TimelineReviewTests(unittest.TestCase):
     # Synthetic fixtures test record enforcement, not semantic classification.
     text = '* 2026-11-05：iPhoneでしずくと会話する試作デモが公開された。<ref>資料</ref>\n'

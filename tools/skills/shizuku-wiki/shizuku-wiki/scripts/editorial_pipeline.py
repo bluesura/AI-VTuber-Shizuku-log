@@ -252,6 +252,52 @@ def apply(text: str, manifest: dict, edits: dict) -> str:
     return ''.join(lines)
 
 
+def wikitext_lint(text: str) -> list[str]:
+    """Detect common MediaWiki formatting mistakes (hyphen lists, unintended single newlines)."""
+    warnings: list[str] = []
+    in_block = False
+    in_table = False
+    prev_prose_line: int | None = None
+    lines = text.splitlines()
+    for idx, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not in_block and BLOCK_START.search(line):
+            in_block = True
+            prev_prose_line = None
+            continue
+        if in_block:
+            if BLOCK_END.search(line):
+                in_block = False
+            prev_prose_line = None
+            continue
+        if stripped.startswith('{|'):
+            in_table = True
+            prev_prose_line = None
+            continue
+        if in_table:
+            if stripped.startswith('|}'):
+                in_table = False
+            prev_prose_line = None
+            continue
+        if re.match(r'^\s*-\s+\S', line):
+            warnings.append(f'L{idx}: 箇条書きにハイフン「- 」が使われています（MediaWiki標準の「* 」を使用）。')
+        is_special = (
+            not stripped
+            or bool(SKIP_LINE.match(line))
+            or bool(re.match(r'^\s*[*#;:=]', line))
+            or stripped.endswith('<br>')
+            or stripped.endswith('<br/>')
+            or stripped.endswith('<br />')
+        )
+        if is_special:
+            prev_prose_line = None
+        else:
+            if prev_prose_line is not None:
+                warnings.append(f'L{prev_prose_line}-L{idx}: 通常の改行1つで地の文が続いています（段落分けは空行、同段落内改行は <br> を使用）。')
+            prev_prose_line = idx
+    return warnings
+
+
 def stats(baseline: str,revised: str) -> dict:
     a,b=prepare(baseline), prepare(revised)
     before=[item['source'] for item in a['editable']]
@@ -271,6 +317,7 @@ def stats(baseline: str,revised: str) -> dict:
             if old!=new and (index not in old_editable or index not in new_editable):
                 warnings.append(f'保護対象または非本文の行 L{index} が変更されています。')
                 if len(warnings)>10: break
+    warnings.extend(wikitext_lint(revised))
     added=sorted(set(ALPHANUM.findall(revised)) - set(ALPHANUM.findall(baseline)))
     if added: warnings.append('英字表現が追加されています（固有情報の追加か確認）。')
     return {'baseline_editable_lines':len(before),'revised_editable_lines':len(after),'changed_lines':sum(x!=y for x,y in zip(before,after))+abs(len(before)-len(after)),'added_ascii_terms':added,'warnings':warnings,'note':'形式検査のみ。事実・心理・確度・発言者の変化は人間/AIが原文と出典で照合すること。'}

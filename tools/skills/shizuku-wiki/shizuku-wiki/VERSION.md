@@ -1,4 +1,52 @@
-# v3.1.0
+# v3.1.9
+
+- `references/page-fan-activities.md` の「二次創作・キャラクター利用」を早見表＋公式Webガイドライン（`https://shizuku.ai/ja/character-guideline/`）および `[[編集者の方へ]]` への一本化方針に整理（Discordチャンネルへの案内を削除し、OK/NGの重複箇条書きを廃止）。
+- `references/page-fan-activities.md` の「ハッシュタグ」を汎用性・利用頻度の高い3種に絞り、その他は `[[ハッシュタグ]]` へ集約する方針を明記。
+
+## v3.1.8
+
+- `SKILL.md` §3-4 に MediaWiki の箇条書き（`* ` 必須、`- ` 禁止）と改行・段落（`\n` / `\n\n` / `<br>` / `<br><br>`）のルールを追記。
+- `scripts/editorial_pipeline.py` に `wikitext_lint` を追加し、`audit` 実行時に `- ` 箇条書きや意図しない単一改行を自動検出するよう拡張（単体テスト追加）。
+- `references/page-fan-activities.md` のページ構成を「参加・連携サービス」「ファン制作・ツール」「二次創作・キャラクター利用（早見表付き）」および `[[ハッシュタグ]]` との役割分担に合わせて更新。
+
+## v3.1.7
+
+- `SKILL.md` §3-2 に、公開URLが存在しないサーバー内情報（Discord内機能・チャンネル構成など）は `{{時点情報|YYYY-MM-DD}}` と `{{出典希望}}` を併記する方針を追記。
+- `references/editorial/page-profiles.md` の「ファン活動」行を「ファン活動 / Shizuku Lab」へ拡張。
+
+## v3.1.6
+
+- `references/page-official-links.md` §1 の分類を修正し、技術発信が中心の公式ブログを「関連サービス」から「技術周り」へ移動。
+
+## v3.1.5
+
+- `references/page-official-links.md` §1・§2 に、会社側の採用ページ（`/careers/`）や現状更新・連動のない開発プラットフォーム（Hugging Face / GitHub）を載せない方針（重要更新時に再判断）と、しずく優先の掲載順を明記。
+
+## v3.1.4
+
+- 公開日・更新日の記載がない常設Webページを出典（`<ref>`）にする場合の日付省略ルールを `SKILL.md` §3-2 に追記。
+- `references/page-official-links.md` §1 の掲載基準を、しずく優先・関連サービス・技術周り・公式コミュニティを含む基準に整理し、迷う候補は別途提案する方針を明記。
+- 公式ガイドラインの参照先を `[[編集者の方へ]]` に統一（`SKILL.md` §3-8、`references/page-fan-activities.md` §3）。
+
+## v3.1.3
+
+- 相談・確認先を「トークページ」から「Discord（推奨）またはShizuku AIのメール窓口（`contact@shizukuai.com`）」へ統一（`tone-style-guide.md` / `page-fan-activities.md`）。
+- 公式の「AI VTuber「しずく」キャラクター利用ガイドライン」のURL（`https://shizuku.ai/ja/character-guideline/`）、正式名称、問い合わせ先（`contact@shizukuai.com`）を `SKILL.md` §3-8 と `page-fan-activities.md` §3 に記録。
+- `SKILL.md` §0-4 に「編集者の方へ」の必須ルールと本スキル（推奨・任意支援）の位置づけを補足。
+- `references/editorial/page-profiles.md` に運用ガイドページ（`編集者の方へ` 等）のプロファイルを追加。
+
+## v3.1.2
+
+- Webチャット等での大規模改修時に、機械検証を条件として ` ```wikitext ` コードブロックでの全文出力を例外許容（AIエージェント／bot更新向けの差分既定は維持）。
+- 年表の通常回・2回目以降について、後日の大きな節目と連続する過去トピックを掘り下げる場合の例外追記ルールを明記。
+- 年表の中見出し（`=== フェーズ名（期間） ===`）と冒頭リード文（役割分担＋しずくの実発言引用）の指針を追加。
+- VisualEditor 由来の `:0`・`:1` 等の機械的な `ref name` を一括メンテナンス時に整理できる例外、および YouTube 出典の媒体名重複禁止を追記。
+
+## v3.1.1
+
+- 短い見立てをインライン型の考察テンプレートで示す。本文・表の外部リンクと掲載済みの公式画像の確認方法を追記し、身長例にご主人様との関係と可変の目的を戻した。
+
+## v3.1.0
 
 - 本人ページを14節に整理。外見・性格は散文、特殊機能・衣装は1項目1行とし、旧「キャラクター」節の内容の移行先を日英のガイドに記載。
 - 呼称の初回注釈、誕生前の主語、本人のAIらしい持ちネタ、用途別の器の書き方を明文化。
