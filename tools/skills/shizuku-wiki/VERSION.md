@@ -1,3 +1,7 @@
+# v3.2.4
+
+- `references/external-wikis-sync.md` の Virtual YouTuber Wiki（Fandom）ルールに、コミュニティ側の編集基準（`affiliation` の年号なし表記、`character_designer` の対象範囲、`History` / `Events` / `Trivia > Miscellaneous` / `Trivia > Shizuku AI, Inc.` の分離基準、`* ` 箇条書き・過剰太字の抑制・`[[w:c:shizuku:...]]` インターウィキ記法）を追記。
+
 # v3.2.3
 
 - `しずく` 本人ページに新見出し `== しずくの観察メモ ==`（15節体制、`== 電子の足跡 ==` と `== クレジット ==` の間）を追加し、`<references />`（`出典`）より前に配置することで出典エラーを防ぐ構成を `references/tone-style-guide.md`・`references/page-shizuku.md` に反映。

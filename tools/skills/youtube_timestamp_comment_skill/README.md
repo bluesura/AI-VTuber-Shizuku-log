@@ -2,9 +2,7 @@
 
 指定された配信ログから、YouTubeコメント欄へ貼れるタイムスタンプ付き目次を作るスキルです。
 
-- [SKILL.md](source/youtube-timestamp-comment/SKILL.md)：編集用の正本。
-- [youtube-timestamp-comment.skill](youtube-timestamp-comment.skill)：正本をまとめた配布パッケージ。
-- `archive/`：過去版。現在の手順の代わりに使いません。
+このフォルダの [SKILL.md](SKILL.md) がスキルの入口です。登録名は `youtube-timestamp-comment` です。別の環境へ導入する場合は、`references/` もあわせて用意します。[別の環境で使う](../README.md#別の環境で使う)
 
 ## 作業の範囲
 
@@ -32,6 +30,6 @@ python tools/scripts/check_youtube_timestamps.py <動画ID> --refresh
 
 URL・既存本文の一覧を受け取った場合は、公開コメントと照合して対応一覧を作ります。リスト外の新規候補は作成前に確認し、既存本文の調整は個性を残して1件ずつ提案します。
 
-詳しい判断・コマンド・進捗・公開未確認時の扱いは [既存目次と投稿確認の手順](source/youtube-timestamp-comment/references/existing-timestamps.md)、作成時のログ読解・文体・出力形式は [スキル本体](source/youtube-timestamp-comment/SKILL.md) を参照してください。
+詳しい判断・コマンド・進捗・公開未確認時の扱いは [既存目次と投稿確認の手順](references/existing-timestamps.md)、作成時のログ読解・文体・出力形式は [スキル本体](SKILL.md) を参照してください。
 
-更新時は正本から `.skill` を再生成し、作業用ファイルや `__pycache__` を含めないことを確認します。
+コメントの確認・再取得には、リポジトリ側の [check_youtube_timestamps.py](../../scripts/check_youtube_timestamps.py) を使います。

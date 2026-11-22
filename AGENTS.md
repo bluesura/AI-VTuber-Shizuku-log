@@ -24,7 +24,7 @@ AI VTuber「しずく」の配信・動画・SNSの発言を保存し、検索�
 - `tools/scripts/`: 収集、匿名化、字幕変換、伏せ字化、画像処理用の単体スクリプト。
 - `tools/prompts/`: ログ整形・分析・抽出用プロンプト。
 - `tools/workflows/`: 手動またはLLM併用ワークフローの手順書。
-- `tools/skills/`: 配布可能なAIスキルと補助スクリプト。
+- `tools/skills/` はAIスキルと補助スクリプトの置き場です。[スキル一覧](tools/skills/README.md)
 - `tools/shizuku-pipeline/`: ログからWiki候補を作る、独立した半自動パイプライン。
 
 `persona/00_persona/bserver_profile.md` はファイル名だけが `observer_profile.md` の先頭文字欠落になっている既存ファイルです。参照元をすべて更新する作業でない限り、ついでに改名しないでください。
@@ -58,7 +58,7 @@ AI VTuber「しずく」の配信・動画・SNSの発言を保存し、検索�
 
 - しずくのログ更新: `python tools/scripts/update_shizuku_logs.py --apply`
 - 収録済み動画の字幕補完・日本語ASRの再生成: 下記「字幕なし配信・日本語ASRのワークフロー」と `tools/workflows/字幕なし配信の文字起こし.md`
-- Fandom Wikiの調査・振り分け・差分提案・更新: 下記「Fandom Wiki編集スキル」と [スキル本体](tools/skills/shizuku-wiki/source/shizuku-wiki/SKILL.md)
+- Fandom Wikiの調査・振り分け・差分提案・更新: 下記「Fandom Wiki編集スキル」と [スキル本体](tools/skills/shizuku-wiki/SKILL.md)
 - ログの取得: `tools/scripts/download_youtube_subtitles.py` の先頭説明と `--help`
 - 既存ログの匿名化: `tools/scripts/anonymize_chat.py <対象ファイル>`。このスクリプトには `--help` がなく、既存ファイルを明示しないとカレントディレクトリ以下の一括処理へフォールバックします。必ず対象を確認して実行してください（ファイルを上書きします）
 - SRTからSBVへの変換: `tools/scripts/srt_to_sbv.py --help`
@@ -75,23 +75,23 @@ Shizuku Fandom（<https://shizuku.fandom.com/>）向けの `shizuku-wiki` スキ
 
 参照順は次のとおりです。
 
-1. [スキル領域のAGENTS.md](tools/skills/shizuku-wiki/AGENTS.md)：適用範囲と補助ツールの扱い。
-2. [スキル本体（SKILL.md）](tools/skills/shizuku-wiki/source/shizuku-wiki/SKILL.md)：振り分け表、ページ間の連動、日付・出典・差分の共通規則。
-3. 同スキルの `references/page-*.md` にある対象ページの手順と [文体ガイド](tools/skills/shizuku-wiki/source/shizuku-wiki/references/tone-style-guide.md)。英語版を扱う場合は `references/translation-guide.md` も参照します。
+1. [スキル領域の共通指示](tools/skills/AGENTS.md) と [Wiki編集スキル固有の指示](tools/skills/shizuku-wiki/AGENTS.md) で、適用範囲と補助ツールの扱いを確認する。
+2. [スキル本体（SKILL.md）](tools/skills/shizuku-wiki/SKILL.md)：振り分け表、ページ間の連動、日付・出典・差分の共通規則。
+3. 同スキルの `references/page-*.md` にある対象ページの手順と [文体ガイド](tools/skills/shizuku-wiki/references/tone-style-guide.md)。英語版を扱う場合は `references/translation-guide.md` も参照します。
 4. [スキルのREADME](tools/skills/shizuku-wiki/README.md)：導入、補助スクリプト、BotPasswordの設定・確認手順。
 
 作業は対象ページの現在のWikiソースと基準リビジョンの確認から始めます。配信ログなどの一次資料に戻り、本人の発言・視聴者の発言・分析者の解釈、確定情報・未確認情報を区別して掲載先を決めます。提案は「追記／置換」、既存本文の挿入位置、実際のMediaWiki記法、出典を含む差分として示し、連動ページと英語版の扱いも報告します。
 
-調査・本文作成・公開確認の具体的な手順は [記事の調査・編集・新規作成](tools/skills/shizuku-wiki/source/shizuku-wiki/references/article-workflow.md) にまとめています。
+調査・本文作成・公開確認の具体的な手順は [記事の調査・編集・新規作成](tools/skills/shizuku-wiki/references/article-workflow.md) にまとめています。
 
 - 連続企画は、本編に加えて振り返り配信・公式チャット・公式の説明や規約も必要に応じて確認します。しずくの記憶についての語りを、そのままサービスの保存仕様とみなしません。
 - 差分作成後は、変更した節を前後の段落と続けて読み、文体・箇条書き・時系列・既存内容との整合を確認します。終了した企画は、当時の参加方法と現在の視聴方法を区別します。
-- 年表は初稿前に出来事と確認段階を整理し、追加・置換する出来事を [年表手順 §7](tools/skills/shizuku-wiki/source/shizuku-wiki/references/page-timeline.md#7-年表の意味的レビュー提案前公開直前に必須) に従って審査します。提案前と公開直前に審査済みの本文との一致を確認します。
+- 年表は初稿前に出来事と確認段階を整理し、追加・置換する出来事を [年表手順 §7](tools/skills/shizuku-wiki/references/page-timeline.md#7-年表の意味的レビュー提案前公開直前に必須) に従って審査します。提案前と公開直前に審査済みの本文との一致を確認します。
 - 提案のみの依頼ではWikiへ反映しません。表示済みの案に対する公開承認は対象ページ・内容の範囲で引き継ぎ、承認時に指定された修正も反映します。新たな未確認事項がなければ、同じ承認を取り直しません。
 - 既存ページは基準リビジョンと本文ハッシュを反映直前に照合します。新規ページは未作成を確認し、`createonly` で先行作成を上書きしません。`scripts/update_videos_streams.py` は「動画・配信」専用で、他ページへ転用しません。
 - 公開後は保存本文と表示を読み直し、出典エラー・内部リンク・カテゴリを確認します。出典のアーカイブ保存が制限された場合は、保存確認済みと未完了を分けて記録します。調査案・承認記録・反映結果はGit管理外の `outputs/shizuku-wiki/` に保存します。
 
-このリポジトリでは上記の `SKILL.md` を直接読んで利用できます。他の環境への導入用には [配布パッケージ](tools/skills/shizuku-wiki/shizuku-wiki-v3.skill) があります。グローバルにインストール済みとは仮定しません。
+このリポジトリでは上記の `SKILL.md` を直接読んで利用できます。別の環境への導入は [スキル一覧の導入案内](tools/skills/README.md#別の環境で使う) を参照します。
 
 ## Fandom Wikiの認証設定
 
@@ -185,11 +185,12 @@ python tools/scripts/transcribe_youtube.py <動画ID> --profile japanese --resum
 
 ```powershell
 # Pythonの構文確認
-python -m compileall -q tools/scripts tools/shizuku-pipeline/scripts tools/skills/shizuku-wiki/video-duration-collector/scripts
+python -m compileall -q tools/scripts tools/shizuku-pipeline/scripts tools/skills/shizuku-wiki/scripts tools/skills/video-duration-collector/scripts
 
 # 現在ある単体テスト
 python -m unittest discover -s tools/scripts -p "test_*.py"
-python -m unittest discover -s tools/skills/shizuku-wiki/video-duration-collector/scripts -p "test_*.py"
+python -m unittest discover -s tools/skills/shizuku-wiki/scripts -p "test_*.py"
+python -m unittest discover -s tools/skills/video-duration-collector/scripts -p "test_*.py"
 
 # 空白エラーと意図しない差分の確認
 git diff --check

@@ -26,7 +26,7 @@ Readme.md                       利用者向けの入口（本書）
 | `tools/scripts/` | ログ収集、匿名化、字幕変換、文字起こし等の単体スクリプト |
 | `tools/prompts/` | ログ整形・分析・抽出用のプロンプト |
 | `tools/workflows/` | 手動またはLLM併用の詳しい手順 |
-| `tools/skills/shizuku-wiki/` | Fandom Wikiの調査・振り分け・差分提案・公開手順 |
+| [`tools/skills/`](tools/skills/README.md) | Wiki編集、動画の再生時間収集、YouTubeコメント用の目次作成 |
 | `tools/shizuku-pipeline/` | ログからWiki候補を作る独立した半自動パイプライン |
 
 ### ログを読むとき
@@ -83,7 +83,7 @@ python tools/scripts/transcribe_youtube.py <動画ID> --profile japanese --repla
 
 ## Fandom Wikiの編集
 
-[しずくWiki編集スキル](tools/skills/shizuku-wiki/source/shizuku-wiki/SKILL.md)を使い、元ログから情報をページ別に振り分け、前後の文脈に合う差分を作ります。連続企画の専用記事、新規ページも対象です。
+[しずくWiki編集スキル](tools/skills/shizuku-wiki/SKILL.md)を使い、元ログから情報をページ別に振り分け、前後の文脈に合う差分を作ります。連続企画の専用記事、新規ページも対象です。
 
 1. 現在のWikiソースを確認する。新規ページでは正式名称と未作成を確認する。
 2. 字幕・公式チャット・説明欄・公式発表等を調べ、追記・置換または新規記事の本文案を作る。
@@ -93,8 +93,9 @@ python tools/scripts/transcribe_youtube.py <動画ID> --profile japanese --repla
 終了したリアルタイム企画は、当時の参加方法と現在のアーカイブ視聴を区別します。しずくの記憶についての語りと、サービスのデータ保存仕様も分けて扱います。
 
 - [スキルのREADME](tools/skills/shizuku-wiki/README.md)：導入、BotPasswordの登録・権限、既存更新と新規作成の違い。
-- [記事ワークフロー](tools/skills/shizuku-wiki/source/shizuku-wiki/references/article-workflow.md)：調査、文脈確認、差分、API反映、公開後の確認。
-- [文体ガイド](tools/skills/shizuku-wiki/source/shizuku-wiki/references/tone-style-guide.md)：しずくを主語にした文章、呼称、引用の扱い。
+- [プロンプトパターン集](tools/skills/shizuku-wiki/PROMPT_PATTERNS.md)では、Wikiソースの渡し方と、更新案・点検・翻訳などの依頼文を確認できます。
+- [記事ワークフロー](tools/skills/shizuku-wiki/references/article-workflow.md)：調査、文脈確認、差分、API反映、公開後の確認。
+- [文体ガイド](tools/skills/shizuku-wiki/references/tone-style-guide.md)：しずくを主語にした文章、呼称、引用の扱い。
 
 `update_videos_streams.py` は「動画・配信」専用です。他ページや新規記事の公開へ転用しません。Wikiの調査案・承認記録・公開結果は `outputs/shizuku-wiki/` に保存し、一次ログや配布スキルへ混ぜません。
 

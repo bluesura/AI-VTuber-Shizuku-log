@@ -14,6 +14,8 @@ YouTubeや、`yt-dlp`が対応する各種動画サイトのURLから、動画�
 
 ## セットアップ
 
+スキルとして使う場合は [SKILL.md](SKILL.md) を参照してください。コマンド例は `tools/skills/video-duration-collector/` をカレントディレクトリとして実行します。同梱ファイルは [manifest.txt](manifest.txt) に記載しています。
+
 Python 3.10以上を利用します。YouTube以外も広く扱う場合、またはYouTube APIキーを使わない場合は`yt-dlp`をインストールしてください。
 
 ```bash
