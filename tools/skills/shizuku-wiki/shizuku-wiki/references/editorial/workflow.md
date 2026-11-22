@@ -1,45 +1,69 @@
-# v2 文章品質ワークフロー（公開前のローカル文章工程）
+# 文章品質ワークフロー
 
 ## 判断の順番
 
-1. 対象ページの現行Wikiソースとrevisionを取得し、Wikiルール・出典・記事種別を決める。データ行の機械更新は既存の手順を使用し、文章推敲を挟まない。
-2. 今回の**提案箇所のみ**「v1相当初稿」として書く。事実や引用は原典と照合し、既存のWiki形式で作る。これは旧版Skillを同時起動した結果ではない。
-3. 対象ページに合わせて`page-profiles.md`の強度を決定。推敲が適さなければ初稿をそのまま採用する。
-4. 本人紹介・企画記事などの地の文は`yomiyasu-adapter.md`で必要部分だけ一度推敲。本文中の称号・名言・世界観は`style-exceptions.md`に従い保持。
-5. 利用可能なら次の保護手順を使用する。`python scripts/editorial_pipeline.py prepare --input proposal_v1.wiki --out editable.json`。出力の`editable`のみ編集可。`masked`に現れる`⟦MW...⟧`はそのまま残し、`edits`（segment_id→推敲後文字列）をJSONにする。`python scripts/editorial_pipeline.py apply --input proposal_v1.wiki --segments editable.json --edits edits.json --out proposal_v2.wiki`。記法保護・数字の増減で違反したら拒否する。**単一の提案部分**に対して使い、既存ページ全文を一括編集しない。
-6. 診断は本文の保護済み地の文を対象にする。`deslop-ja`を必ずしも走らせる必要はない。指摘は候補であり、表現・固有の比喩・引用に該当すれば除外。`natural-japanese`から同梱した`paragraphs.py`は段落を分けるだけで判断はしない。追加固有情報検査`newfacts.py`には任意依存があり、`audit`は導入済みの場合のみ自動で起動し、未導入環境ではスキップして目視照合する。
-7. `python scripts/editorial_pipeline.py audit --baseline proposal_v1.wiki --revised proposal_v2.wiki --json-out audit.json`。実行環境と読み出し権限があれば診断レポートを作り、トークン差分・数字・リンク・URL・タグ・候補語を確認。機械検査が通過しても、事実を無断追加していない保証にはならない。**AIが原文と根拠を必ず再読**する。重大な構文変更は採用しない。
-8. 最新Wikiソースを基準に、既存§5の「追記」「置換」形式で最終的な差分案を作成。対象ページと反映位置を必ず明記。承認なしに公開しない。
+1. 現行Wikiソース・リビジョン、出典、ページ別ガイド、文体ガイドを確認する。データ行だけの機械更新は既存の手順を使う。
+2. 年表は `page-timeline.md` §2-1に従い、各項目の種類・確認段階・しずくとの関係を整理してから、今回の追加・置換部分だけを初稿にする。視点にずれがあれば根拠に戻って構成を直す。
+3. `page-profiles.md` で推敲の強度を選ぶ。推敲が必要な箇所は `yomiyasu-adapter.md` に従い、称号・名言・世界観は `style-exceptions.md` に従って保持する。
+4. 最終稿を変更後の節に組み込み、前後の項目と対象ページのルールに照らして読む。年表は推敲しなかった行を含む全追加・置換項目を `page-timeline.md` §7で審査し、下記の記録を作る。
+5. 形式と審査記録を検査してから、挿入位置付きのWiki差分を提示する。未解決の項目は公開候補から外し、保留理由を報告する。公開直前の再確認は `article-workflow.md` §5に従う。
 
-## 通常モード／比較モード
+## 形式保護と診断
 
-- **通常（既定）**：Wiki変更差分だけを表示。初稿と完成稿の比較や内部評価点は出さない。文法・出典・記法に未解決の問題がある場合だけ報告。ローカルの`proposal_v1.wiki`などは必要な作業の間だけ利用し、不要なファイルをGitにコミットしない。
-- **比較モード**：ユーザーが「比較」「A/Bテスト」「v1 v2」「推敲前後を見たい」と明示した場合にのみ、`audit`に`--compare-report comparison.md`を付ける。表示順は「①v1相当初稿（推敲前）→②v2推敲稿（後）→③変更点の差分→④採用理由／失敗・保護警告→⑤公開提案のWiki差分」。同じ根拠・初稿を用いた比較として扱う。検査結果は文章の主観的な自然さの点数ではない。
-- v1 `.skill` とv2 `.skill` を互いに独立実行した比較をしたい場合は、明示的に両方を個別起動し**同一モデル・同一Wikiソース・同一資料**を用いる。そのとき上記のv1相当初稿との比較とは区別して表記する。
+以下はスキルフォルダを基準にした例。原稿・記録はGit管理外の `outputs/shizuku-wiki/<作業名>/` 等に置く。短いファイル名は作業ファイルのパスに読み替える。
 
-## ページ別ルーティングと例外
-
-`page-profiles.md` と `style-exceptions.md` を参照。`[[...]]`、`{{...}}`、`<ref>`、引用、外部リンク、カテゴリ、ページ名、日付、数値、出典URL、表構造、見出しの意味を勝手に変えない。複雑なテンプレート・複数行の表やHTMLは機械処理から除外し、既存手順に従って差分確認する。
-
-## 第三者診断器（同梱・オフライン）
-
-```
-python vendor/deslop-ja/check.py proposal_v2.wiki --json --reading-load
-python vendor/natural-japanese/paragraphs.py proposal_v2.wiki --json
-# 形態素解析が必要な精密Lint（任意）:
-python vendor/natural-japanese/lint.py proposal_v2.wiki --json
-# SudachiPy と sudachidict-core が任意で入っている環境に限定:
-python vendor/natural-japanese/newfacts.py proposal_v1.wiki proposal_v2.wiki --json
+```text
+python -X utf8 scripts/editorial_pipeline.py prepare --input proposal_initial.wiki --out editable.json
+python -X utf8 scripts/editorial_pipeline.py apply --input proposal_initial.wiki --segments editable.json --edits edits.json --out proposal_final.wiki
 ```
 
-**注意**：上記の診断器はMediaWiki記法を厳密に理解しない。判断に使う際は`prepare`が抽出した文章部分を入力にする方が適切。記法に反応した警告は除外してよい。全文へ自動修正をかけない。
+`editable.json` の候補から推敲が必要な地の文だけを選ぶ。`masked` 中の `⟦MW...⟧` は同じ順に残す。`edits.json` は `{"edits": {"L00001": "推敲後のmasked文字列"}}` 形式。事実の訂正が必要なら出典を確認し、初稿の工程へ戻る。
 
-## 受け入れ条件
+```text
+python -X utf8 scripts/editorial_pipeline.py audit --page general --baseline proposal_initial.wiki --revised proposal_final.wiki --json-out audit.json
+```
 
-詳しい品質ゲートと試験設計は `QUALITY-GATES.md` も読む。
+`audit` は日付・数値・保護要素等の形式上の差を検出する。警告は原典と差分に照らして確認し、重大な不一致を解決してから採用する。年表は下記のコマンドを使う。
 
+`deslop-ja` は診断専用。`natural-japanese` の `paragraphs.py` は段落分割、`newfacts.py` はSudachiPy等がある場合の追加固有情報検査に使う。複雑なテンプレート・複数行の表やHTMLは個別に差分確認する。任意依存やPythonが使えないときは未実施を記録し、目視で照合する。
 
-- 不一致のある日付・数値・引用・リンク、ソース無しの事実追加、根拠のない推定心理、MediaWiki構文破損は**不採用**。
-- `ご主人様`・しずくの主体性・意図した比喩・ユーモアの機械的な言い換えは**不採用**。
-- 文章改善は、何が改善したかを具体的に説明できる時だけ採用。無理に書き換えない。
-- 通常モードで比較情報を勝手に付けない。比較モードで旧版Skillが実行されたかのように表示しない。
+## 年表の審査記録
+
+`proposal_final.wiki` は今回の**追加・置換後の全項目**（`* YYYY-MM-DD：…`）と必要な年見出しだけにする。既存の変更しない行、差分の `+`、挿入位置の説明は別に置く。同日の別件も一行ずつ書く。日付未確認の行は保留する。
+
+```text
+python -X utf8 scripts/editorial_pipeline.py timeline-template --input proposal_final.wiki --out timeline-review.json
+```
+
+テンプレートは未審査で生成される。初稿前の整理と `page-timeline.md` §7の審査結果を各項目に記入する。
+
+| キー | 記入内容 |
+|---|---|
+| `kind` | `action_change`（行動・変化）、`demo`（試作・デモ）、`announcement`（開発側の発表）、`foundation`（活動の土台） |
+| `stage` | `operational`（実運用・実施済み）、`demo`（デモで確認）、`prototype`（試作）、`announced`（発表のみ）、`not_applicable`（段階の区別が該当しない出来事） |
+| `source_basis` | `locator`（URL・タイムスタンプ・参照ファイル等）と `fact`（確認できた事実と根拠の限界）の組 |
+| `shizuku_event` | しずくに何が起きたか、またはしずくの活動の土台とどう関係するか |
+| `perspective` | しずくの出来事を中心に記す `direct`、技術的な発表・開発を中心に残す `technical_exception` |
+| `alternative` / `exception_reason` | 技術的例外の場合に必須。検討したしずく中心の別案と、その案では保てない事実の範囲や行為者 |
+| `checks` | `viewpoint`（視点）、`factual_scope`（事実の範囲）、`granularity`（粒度）、`context`（前後・連動）の各 `status`（`pass` / `hold` / `pending`）と具体的な `reason` |
+| `decision` | 全確認済みなら `pass`、未解決なら `hold`、未審査なら `pending` |
+
+`id`・`text`・ハッシュは検査対象を特定する欄。提案本文を直したら、新しい名前でテンプレートを作り、変更箇所と文脈を再確認する。変わらない項目の判断は、本文と文脈の対応を確認してから引き継げる。ハッシュはUTF-8テキストとして読み込んだ内容（BOM除去・改行正規化後）から計算する。
+
+```text
+python -X utf8 scripts/editorial_pipeline.py audit --page timeline --baseline proposal_initial.wiki --revised proposal_final.wiki --timeline-review timeline-review.json --json-out audit.json
+```
+
+年表では `--page timeline` を明示する。推敲なしの場合はbaselineとrevisedに同じファイルを渡す。審査記録が未了なら終了コード1と `timeline_review.status: blocked` が返る。項目と理由を調べて解決してから公開提案に戻す。形式警告は別途確認する。
+
+`record_valid` は全項目の記録がそろい、保留がなく、審査対象と本文が一致していることを示す。視点と事実の妥当性はAI/人間が原典と文脈に照らして判断する。ユーザーの公開承認は別途確認する。
+
+Pythonを実行できない場合も同じ欄をMarkdown等で記録して最終稿との対応を手動で照合し、機械検査の未実施と理由を報告する。公開直前は `article-workflow.md` §5に従う。
+
+## 通常モードと比較モード
+
+- 通常は最終Wiki差分と必要な未解決事項を表示する。
+- 推敲前後の比較を明示された場合だけ `audit` に `--compare-report comparison.md` を追加する。同一実行内の初稿・最終稿・差分・採否理由を提案部分に限って示す。
+- 版間比較は同一モデル・同一現行ソース・同一資料で各版を別々に実行する。
+
+受け入れ条件は `QUALITY-GATES.md` を参照する。

@@ -25,17 +25,17 @@ Wikiの編集をLLMに手伝わせると、日付の書き方が毎回違った�
 
 このリポジトリでは `source/shizuku-wiki/SKILL.md` を直接読んで使えます。グローバルにインストール済みとは仮定しません。
 
-別の環境へ持ち込む場合は `shizuku-wiki.skill` を利用します。zip形式のため展開でき、展開した `shizuku-wiki/` を利用環境のスキル配置手順に従って導入します。
+別の環境へ持ち込む場合は `shizuku-wiki-v3.skill`（v3.0.0）を利用します。ZIPとして展開し、展開した `shizuku-wiki/` を利用環境の手順に従って導入します。
 
-編集用の正本は `source/shizuku-wiki/`、配布物は `shizuku-wiki.skill` です。更新時はREADMEの2コピーを揃え、配布物を再生成します。Wiki本文や一時的な実行スクリプトを配布物へ入れません。
+リポジトリでの編集用の正本は `source/shizuku-wiki/` です。更新時はREADMEの2コピーを揃え、新しい版の配布物を生成します。Wiki本文や一時的な実行スクリプトを配布物へ入れません。
 
 ---
 
-## v2追加機能 — 日本語文章改善
+## v3の変更
 
-既存のスタイルガイドとWiki差分出力を保持し、書き換え対象となる地の文だけを推敲する工程を内蔵しました。**通常は最終的なWiki差分のみ**。テスト時は「v1/v2を比較して」と指定すれば、同じ実行の推敲前（v1相当）と推敲後（v2）の比較が出ます。v1原本は別ファイルとして保管し、既存スクリプトと公開承認手順は引き継ぎます。
+年表は初稿前に、出典をもとに出来事の種類と確認段階を整理します。しずくの生涯の記録として書き、全項目の視点・事実の範囲・粒度・前後の文脈を審査します。提案前と公開直前に記録を照合し、未審査・保留・審査後の本文変更を検出します。
 
-詳しくは [`references/editorial/workflow.md`](references/editorial/workflow.md)。診断器の実行は任意です。`deslop-ja`はPython標準ライブラリで動作します。`natural-japanese`の`paragraphs.py`は標準ライブラリのみ、`newfacts.py`と`lint.py`はSudachiPy／辞書の任意インストールが必要です（未導入でも主フローは動作）。yomiyasuは公開版の意味保持原則を取り込んだWiki専用アダプターであり、元リポジトリ全体の完全移植ではありません。
+yomiyasu 3.1.0をスキルに同梱し、Wikiの地の文を必要な箇所だけ推敲する際に使います。工程と検査コマンドはスキルフォルダの `references/editorial/workflow.md` と `references/editorial/yomiyasu-adapter.md` にあります。通常は最終のWiki差分を示し、推敲の比較は明示された場合に表示します。
 
 ## 使い方
 
@@ -247,9 +247,14 @@ shizuku-wiki/
 ├── SKILL.md                          振り分け表・共通ルール・トーン5原則
 ├── LICENSE
 ├── README.md
+├── VERSION.md
+├── licenses/                        第三者ライセンス
+├── vendor/                           yomiyasu・補助診断器
 ├── scripts/
+│   ├── editorial_pipeline.py         Wiki形式・年表の審査記録の検証
 │   └── update_videos_streams.py      動画・配信ページの確認・承認後反映
 └── references/
+    ├── editorial/                    文章品質ワークフロー
     ├── tone-style-guide.md           文体・語彙・見出しの付け方
     ├── translation-guide.md          日英翻訳の語彙と移行対応表
     ├── page-shizuku.md               しずく（本人ページ）
