@@ -23,8 +23,7 @@ SOFTWARE.
 ---
 
 このライセンスが適用されるのは、本リポジトリに含まれるスキル本体
-（SKILL.md、references/、scripts/ 等のオリジナル部分）に適用します。
-追加の第三者由来ファイルには licenses/ の各ライセンスが適用されます。
+（SKILL.md および references/ 以下のドキュメント）のみです。
 
 しずくWiki（https://shizuku.fandom.com）に掲載されている記事本文は
 Fandomの規定により CC BY-SA でライセンスされており、本ライセンスの対象外です。
