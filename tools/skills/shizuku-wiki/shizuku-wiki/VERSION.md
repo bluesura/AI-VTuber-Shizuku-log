@@ -1,4 +1,11 @@
-# v3.1.9
+# v3.1.10
+
+- `references/page-media-coverage.md` §0 に、`動画・配信` 以外のページでも Fandom MediaWiki API による最新ソース・関連ページの一括取得を活用できる旨を追記。
+- `references/page-media-coverage.md` §1 に、批判的・否定的な報道であっても一次報道であれば索引から除外せず、媒体を主語にした帰属表現と `== 注記 ==` での公式見解併記で扱う方針を追記。
+- `references/page-media-coverage.md` §2 に、記事原題に含まれる本名は `<ref>` 内で維持しつつ、概要欄の地の文では活動名・肩書き（例：`Shizuku AIのCEO`）を用いる切り分けを明記。
+- `references/page-media-coverage.md` §3 に、公開日不明のイベント・協賛ページの日付列ルール（開催期間のJST換算＋注記明記）と、`公式発表` と `ニュース`・`新聞` を分けて同種別同士で統合する基準を追記。
+
+## v3.1.9
 
 - `references/page-fan-activities.md` の「二次創作・キャラクター利用」を早見表＋公式Webガイドライン（`https://shizuku.ai/ja/character-guideline/`）および `[[編集者の方へ]]` への一本化方針に整理（Discordチャンネルへの案内を削除し、OK/NGの重複箇条書きを廃止）。
 - `references/page-fan-activities.md` の「ハッシュタグ」を汎用性・利用頻度の高い3種に絞り、その他は `[[ハッシュタグ]]` へ集約する方針を明記。
