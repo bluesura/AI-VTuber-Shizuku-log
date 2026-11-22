@@ -1,4 +1,10 @@
-# v3.1.10
+# v3.1.11
+
+- `references/page-videos-streams.md` に、ショート動画（`/shorts`）の例外掲載基準（独自企画や1000万〜1億再生規模の注目作）、`== 配信状況 ==` 本数行への `{{時点情報|YYYY-MM-DD}}` 1箇所付与ルール、および案内ブロック（タグの見方・ページ内移動・主なシリーズ企画）・2023-01-19初期テスト配信の保護方針を追記。
+- `references/editorial/page-profiles.md` の `動画・配信` 行を更新し、表外案内文の局所推敲と表内データ非改変を明記。
+- `references/translation-guide.md` §7 に `主なシリーズ企画`（Major Series）、`タグの見方`（Tag Guide）、`ページ内移動`（Jump to Section）を追記。
+
+## v3.1.10
 
 - `references/page-media-coverage.md` §0 に、`動画・配信` 以外のページでも Fandom MediaWiki API による最新ソース・関連ページの一括取得を活用できる旨を追記。
 - `references/page-media-coverage.md` §1 に、批判的・否定的な報道であっても一次報道であれば索引から除外せず、媒体を主語にした帰属表現と `== 注記 ==` での公式見解併記で扱う方針を追記。

@@ -172,6 +172,9 @@
 | 通常動画 | Videos | |
 | ショート | Shorts | |
 | 更新メモ | Update Notes | |
+| 主なシリーズ企画 | Major Series | |
+| タグの見方 | Tag Guide | |
+| ページ内移動 | Jump to Section | |
 | 手動確認リスト | manual verification list | |
 | 初配信 | debut stream | |
 | 2度目の初配信 | second debut stream | V2.0帰還の文脈 |
