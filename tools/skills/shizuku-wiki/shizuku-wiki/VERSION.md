@@ -1,3 +1,9 @@
+# v3.2.0
+
+- `references/external-wikis-sync.md` を新設し、5媒体（Wikipedia日本語版・ピクシブ百科事典・Virtual YouTuber Wiki・Shizuku Wiki・Grokipedia）の役割分担・ライセンス注意（CC BY-SA 4.0/3.0非互換）・コンフリクト事前確認・双方向更新ワークフローを定義。
+- `references/translation-guide.md` §4 に、国内外の「個人勢／企業勢」と英語圏の `Independent` / `Produced by Corporate` のニュアンス差、およびしずくの時期併記基準（`Independent (2023–2025)` / `Shizuku AI (2025–present)`）を追記。
+- `SKILL.md` §7 の参照表に `references/external-wikis-sync.md` を追加。
+
 # v3.1.13
 
 - `SKILL.md` §0-3 に、複数ページや長大ページの一括全文出力時は、URL・記法検証済みの `.wikitext` ファイル一式を `.zip` で提示できる例外を追記。

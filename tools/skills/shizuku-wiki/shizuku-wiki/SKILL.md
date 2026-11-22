@@ -1,7 +1,7 @@
 ---
 name: shizuku-wiki
 metadata:
-  version: "3.1.13"
+  version: "3.2.0"
 description: >
   AI VTuber「しずく」のFandom Wiki（shizuku.fandom.com）を編集・更新するスキル。
   「しずくのwikiを更新して」「年表に追加して」「wikiの動画・配信ページを更新して」「動画・配信を最新にして」「メディア露出に記事を足して」
@@ -10,7 +10,7 @@ description: >
   Shizuku Lab／年表／配信アーカイブ／wikiソース／MediaWiki記法／出典（ref）が話題に出て、
   それを記録・整理・清書する話になったら使う。
   どのページに何をどの粒度で書くかの振り分け、日付・出典・記法の共通ルール、
-  ページ別の更新手順、日英翻訳の語彙を持つ。
+  ページ別の更新手順、日英翻訳の語彙、外部Wiki・百科事典（Wikipedia/Virtual YouTuber Wiki/ピクシブ百科事典/Grokipedia）との双方向連携ルールを持つ。
 ---
 
 # しずく Wiki 編集スキル
@@ -379,7 +379,8 @@ Wikiの更新差分を出し終えたら、そこで終わらせない。**そ�
 
 | 確定したもの | 追記先 |
 |---|---|
-| 新しい訳語・英語表記 | `references/translation-guide.md` |
+| 新しい訳語・英語表記 | `references/external-wikis-sync.md` | 外部Wiki・百科事典（Virtual YouTuber Wiki・Wikipedia・ピクシブ百科事典・Grokipedia）を更新・照合するとき |
+| `references/translation-guide.md` |
 | 新しい出典パターン・日付の扱い・記法 | `SKILL.md`（§3 共通ルール） |
 | しずくの言葉・トーンに関する判断 | `references/tone-style-guide.md` |
 | 特定ページ固有の手順・分類・タグ | 該当する `references/page-*.md` |
@@ -421,6 +422,7 @@ Wikiの更新差分を出し終えたら、そこで終わらせない。**そ�
 | `references/page-official-links.md` | 公式リンクを更新するとき |
 | `references/article-workflow.md` | 配信ログから地の文を作る、企画記事を新設する、動画・配信以外をAPI反映するとき |
 | `references/tone-style-guide.md` | 地の文を書くとき、見出しを新設・変更するとき、記述の可否に迷ったとき |
+| `references/external-wikis-sync.md` | 外部Wiki・百科事典（Virtual YouTuber Wiki・Wikipedia・ピクシブ百科事典・Grokipedia）を更新・照合するとき |
 | `references/translation-guide.md` | 英語ページを作る・更新するとき |
 | `references/monitoring-runbook.md` | Wikiの状態を点検するとき、テンプレートを初回作成するとき、引き継ぎのとき |
 

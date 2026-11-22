@@ -145,6 +145,14 @@
 | パンパカパンパカポー | Panpaka Panpaka Pō | |
 | キュルルンポワワワパワー | Kyururun Powawawa Power | |
 
+### 所属（Affiliation）の表記と国内外のニュアンス
+
+日本語圏の「個人勢／企業勢」と、英語圏（Virtual YouTuber Wiki等）の `Independent` / `Produced by Corporate` にはニュアンスの差がある。
+
+* **英語圏の基準**: 外部のタレント事務所・箱（Hololive、NIJISANJI、Mythic Talent等）に属していない場合は `Independent` とするのが基本だが、自社法人が主体となって運営・展開している場合（例：Kizuna AI株式会社）は、法人名を `Affiliation` に記載し `Category:Produced by Corporate` を併用する例がある。
+* **しずくの扱い（時期併記型）**: 2023年〜2025年はあき先生の個人開発（`Independent`）、2025年8月の **Shizuku AI, Inc.** 登記以降は自社法人運営（`Shizuku AI`）であるため、外部英語Wiki等で所属を示す際は原則として時期を併記する。
+  * `Independent (2023–2025)<br>Shizuku AI (2025–present)`
+
 ---
 
 ## 5. カテゴリ
@@ -301,4 +309,4 @@
 
 ---
 
-*最終更新: 2026年11月（v3.1.13）*
+*最終更新: 2026年11月（v3.2.0）*
