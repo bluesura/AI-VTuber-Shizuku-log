@@ -49,11 +49,13 @@ class TranscribeTests(unittest.TestCase):
                     actual += part.readframes(part.getnframes())
             self.assertEqual(actual, original)
 
-    def test_one_hour_is_not_split(self):
+    def test_one_hour_splits_only_for_comparison(self):
         with tempfile.TemporaryDirectory() as tmp:
             audio = Path(tmp) / "audio.wav"
             write_wave(audio, 3600)
             self.assertEqual(MODULE.split_audio(audio, Path(tmp)), [(audio, 0, 3600)])
+            chunks = MODULE.split_audio(audio, Path(tmp), split_at_hour=True)
+            self.assertEqual([(a, b) for _, a, b in chunks], [(0, 3300), (3300, 3600)])
 
     def test_global_timestamps_and_part_local_speakers(self):
         text = MODULE.render_part(result(), 2, 3300, 4547)
@@ -84,7 +86,7 @@ class TranscribeTests(unittest.TestCase):
                     MODULE.remove_workdir(target, root)
             self.assertTrue(other.is_dir())
 
-    def _workflow(self, root, fail_second=False):
+    def _workflow(self, root, fail_second=False, *, profile="japanese", device=None):
         video = root / "video"
         video.mkdir()
         (video / f"{VIDEO_ID}.info.txt").write_text("既存情報", encoding="utf-8")
@@ -93,6 +95,12 @@ class TranscribeTests(unittest.TestCase):
         staging.mkdir()
         untouched = staging / "run_previous"
         untouched.mkdir()
+        comparison = profile in MODULE.COMPARISON_SUFFIXES
+        if comparison:
+            for suffix in (".ja.srt", ".transcribe.txt"):
+                (video / (VIDEO_ID + suffix)).write_text("既存の字幕", encoding="utf-8")
+        if profile == "qwen-comparison":
+            (video / f"{VIDEO_ID}.nemotron-3.5-transcribe.txt").write_text("Nemotron原文", encoding="utf-8")
 
         def fake_run(command, run_dir, name):
             if name == "download":
@@ -102,10 +110,20 @@ class TranscribeTests(unittest.TestCase):
             else:
                 if fail_second and name == "asr_002":
                     raise RuntimeError("ASR失敗")
-                self.assertIn("--language", command)
-                self.assertEqual(command[command.index("--language") + 1], "ja")
-                self.assertIn("--vad", command)
-                self.assertIn("--diarize", command)
+                if profile == "qwen-comparison":
+                    self.assertEqual(command[2:9], ["qwen3-asr-1.7b", "--language", "ja",
+                                                     "--device", "cpu", "--format", "json"])
+                    return "\n".join(json.dumps({"file": path, "stop": "complete", "text": "パンカパンパカポず"},
+                                                ensure_ascii=False) for path in command[9:])
+                if comparison:
+                    self.assertEqual(command[2:6], ["nemotron-3.5-transcribe", "--speakers", "--format", "json"])
+                    return "\n".join(json.dumps({"file": path, **result(text="パンカパンパカポず")}, ensure_ascii=False)
+                                     for path in command[6:])
+                else:
+                    self.assertIn("--language", command)
+                    self.assertEqual(command[command.index("--language") + 1], "ja")
+                    self.assertIn("--vad", command)
+                    self.assertIn("--diarize", command)
                 return json.dumps(result(text=name), ensure_ascii=False)
             return ""
 
@@ -118,7 +136,7 @@ class TranscribeTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     MODULE.transcribe_video(video, VIDEO_ID, staging_parent=staging)
             else:
-                MODULE.transcribe_video(video, VIDEO_ID, staging_parent=staging)
+                MODULE.transcribe_video(video, VIDEO_ID, staging_parent=staging, profile=profile, device=device)
         self.assertTrue(untouched.is_dir())
         self.assertEqual((video / f"{VIDEO_ID}.info.txt").read_text(encoding="utf-8"), "既存情報")
         self.assertEqual((video / f"{VIDEO_ID}.live_chat.txt").read_text(encoding="utf-8"), "既存チャット")
@@ -142,6 +160,45 @@ class TranscribeTests(unittest.TestCase):
             self.assertFalse((video / f"{VIDEO_ID}.transcribe.txt").exists())
             self.assertEqual(len(list(staging.iterdir())), 2)
             self.assertEqual(len(list(staging.rglob("*.wav"))), 3)
+
+    def test_nemotron_comparison_adds_its_own_file_and_skips_it_on_rerun(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video, staging, untouched = self._workflow(Path(tmp), profile="nemotron-comparison")
+            self.assertEqual(list(staging.iterdir()), [untouched])
+            for suffix in (".ja.srt", ".transcribe.txt"):
+                self.assertEqual((video / (VIDEO_ID + suffix)).read_text(encoding="utf-8"), "既存の字幕")
+            comparison = video / f"{VIDEO_ID}.nemotron-3.5-transcribe.txt"
+            text = comparison.read_text(encoding="utf-8")
+            self.assertIn("[00:55:01.250 --> 00:55:03.000] 区間056/話者0: パンカパンパカポず", text)
+            with patch.object(MODULE, "resolve_speech") as speech, contextlib.redirect_stdout(io.StringIO()):
+                self.assertIsNone(MODULE.transcribe_video(video, VIDEO_ID, profile="nemotron-comparison"))
+                speech.assert_not_called()
+
+    def test_all_comparisons_continue_after_failure_and_report_ids(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            other_id = "hewYVVuoPyQ"
+            for folder, video_id in (("one", VIDEO_ID), ("two", other_id)):
+                directory = root / "logs" / "youtube" / "2026" / folder
+                directory.mkdir(parents=True)
+                (directory / f"{video_id}.info.txt").touch()
+            with patch.object(MODULE, "REPO_ROOT", root), \
+                    patch.object(MODULE.sys, "argv", ["transcribe_youtube.py", "--all", "--profile", "nemotron-comparison"]), \
+                    patch.object(MODULE, "transcribe_video", side_effect=[RuntimeError("取得失敗"), Path("saved")]) as transcribe, \
+                    contextlib.redirect_stdout(io.StringIO()) as stdout, \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(MODULE.main(), 1)
+            self.assertEqual([call.args[1] for call in transcribe.call_args_list], [VIDEO_ID, other_id])
+            self.assertIn("保存 1 / 保存済み 0 / 失敗 1", stdout.getvalue())
+            self.assertIn(f"失敗した動画ID: {VIDEO_ID}", stdout.getvalue())
+
+    def test_qwen_comparison_keeps_nemotron_and_records_input_ranges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            video, staging, untouched = self._workflow(Path(tmp), profile="qwen-comparison", device="cpu")
+            self.assertEqual(list(staging.iterdir()), [untouched])
+            self.assertEqual((video / f"{VIDEO_ID}.nemotron-3.5-transcribe.txt").read_text(encoding="utf-8"), "Nemotron原文")
+            text = (video / f"{VIDEO_ID}.qwen3-asr-1.7b.txt").read_text(encoding="utf-8")
+            self.assertIn("## 区間056 [00:55:00.000 --> 00:56:00.000]\n[時刻・話者は未取得]\nパンカパンパカポず", text)
 
     def test_existing_subtitles_and_transcript_skip_all_external_commands(self):
         with tempfile.TemporaryDirectory() as tmp:

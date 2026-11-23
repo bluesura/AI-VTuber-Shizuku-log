@@ -34,6 +34,7 @@ Readme.md                       利用者向けの入口（本書）
 - `<動画ID>.info.txt`：収録した動画のタイトル、日付、説明欄など。
 - `<動画ID>.ja.srt` / `*.ja.sbv.txt`：YouTubeから取得した字幕。自動字幕の誤認識に注意してください。
 - `<動画ID>.transcribe.txt`：字幕がない配信からローカルASRで生成した、未確認の文字起こし。
+- `<動画ID>.nemotron-3.5-transcribe.txt` / `<動画ID>.qwen3-asr-1.7b.txt`：既存字幕と比較するために、動画の音声から別途生成した未確認の文字起こし。
 - `<動画ID>.live_chat.txt` / `*.comments.txt`：ライブチャット・通常コメント。一般視聴者名は匿名化しています。
 - `*.compiled.md`：AIで整形・要約した派生資料。事実の確認では元の字幕・チャット・動画へ戻ります。
 
@@ -47,6 +48,7 @@ Readme.md                       利用者向けの入口（本書）
 |---|---|
 | 終了済みの未収録配信を追加する | 下記「ログの更新」 |
 | 字幕の補完・日本語ASRの再生成 | [字幕なし配信の文字起こし](tools/workflows/字幕なし配信の文字起こし.md) |
+| 既存字幕と比較するNemotron文字起こし | [比較用の一括処理](tools/workflows/字幕なし配信の文字起こし.md#既存字幕と比較するnemotron文字起こし) |
 | 配信ログを整理・分析する | [分析ワークフロー](tools/prompts/shizuku_analysis/analysis_workflow_guide.md) |
 | 焼き付きチャットをOCRする | [Visual Chat-Timeline Sync](tools/workflows/Visual%20Chat-Timeline%20Syncの手順書.md) |
 | LLMで統合ログ・タイムスタンプを作る | [ログ整形の手順書](tools/workflows/youtube_log_prompt_v-divの手順書.md) |
