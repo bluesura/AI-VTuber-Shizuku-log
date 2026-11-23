@@ -1,3 +1,13 @@
+# v3.3.0
+
+- **GitHub（研究基盤）と Fandom Wiki（公開の入口）の二層構造**を `references/external-wikis-sync.md` に定義し、生ログ・取得メタデータ（取得日時・公式字幕/ASR・AI加工版）・未収録範囲リスト・`ai_hypothesis` と、Wiki側の `observed` 事実・タイムスタンプ逆引き導線の役割分担を明記。
+- `SKILL.md` §3-2 および `references/editorial/QUALITY-GATES.md` に、**「本人発言の記録」と「技術資料・確定仕様の根拠」の切り分け**を追加（`<ref>` 形式を増やさずチェック工程で制御）。
+- `references/article-workflow.md` に、中間データ・調査メモへの取得メタデータ保持、未匿名化の個人生ログの非収録境界、および **`ai_hypothesis` を確定本文案に混ぜず別枠提示する分離ゲート**を追加。
+- `references/tone-style-guide.md` §5・`references/page-timeline.md` §7 に、AI言動の**「時系列併記」原則**（裏付けのない伏線回収・意図的因果の禁止）を追記。
+- `references/editorial/style-exceptions.md`・`references/editorial/QUALITY-GATES.md` に、**「綺麗に直しすぎない」原則のページ別適用**（`しずく` 本人ページ全般は原文・ノイズ保持と標準語補足の並記、`年表`・`メディア露出` 等は情報索引として均質化）を明記。
+- `references/page-shizuku.md`・`references/page-fan-activities.md` に、「面白さ」と「歴史的重要性」の切り分けおよび匿名化前提の収録範囲を補足。
+- `references/external-wikis-sync.md`・`references/monitoring-runbook.md` に、**出典ロンダリングの防止**・**健全な相互検証**・年次見直しでのルール間矛盾照合を追加。
+
 # v3.2.4
 
 - `references/external-wikis-sync.md` の Virtual YouTuber Wiki（Fandom）ルールに、コミュニティ側の編集基準（`affiliation` の年号なし表記、`character_designer` の対象範囲、`History` / `Events` / `Trivia > Miscellaneous` / `Trivia > Shizuku AI, Inc.` の分離基準、`* ` 箇条書き・過剰太字の抑制・`[[w:c:shizuku:...]]` インターウィキ記法）を追記。
