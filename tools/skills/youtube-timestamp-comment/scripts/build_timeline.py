@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""YouTube配信ログ（sbv / live_chat / live_chat_ocr）前処理スクリプト。
+"""YouTube配信ログ（sbv / srtフォールバック / live_chat / live_chat_ocr）前処理スクリプト。
 
-分割されたSBV字幕とライブチャットを突き合わせ、
+分割された字幕（sbv優先、無ければsrt）とライブチャットを突き合わせ、
 1) 通読用タイムライン (condensed.txt)
 2) 秒単位時刻確定用タイムライン (timeline.txt)
 3) 運営#コメント・コーナー切れ目候補・チャット反応スパイク
@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import glob
-import os
 import re
 import sys
 from collections import Counter
@@ -38,13 +37,14 @@ DEFAULT_CORNER = [
 ]
 
 SBV_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:\.\d+)?),(\d+(?::\d{2})+(?:\.\d+)?)")
+SRT_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:[.,]\d+)?)\s*-->\s*(\d+(?::\d{2})+(?:[.,]\d+)?)")
 CHAT_RE = re.compile(r"\s*\[(-?\d+(?::\d{2})+)\]\s*@?\s*(.+?)\s*[:：]\s*(.*)")
 
 
 def to_sec(ts: str) -> int:
     neg = ts.startswith("-")
     s = 0
-    for p in ts.lstrip("-").split(":"):
+    for p in ts.lstrip("-").replace(",", ".").split(":"):
         s = s * 60 + int(float(p))
     return -s if neg else s
 
@@ -82,8 +82,36 @@ def parse_sbv(paths: list[Path]) -> list[tuple[int, str]]:
                 i += 1
                 text_parts: list[str] = []
                 while i < n and lines[i].strip():
-                    # 万一空行なしで次のタイムスタンプが来た場合はそこで区切る
                     if SBV_TS_RE.fullmatch(lines[i].strip()):
+                        break
+                    text_parts.append(lines[i].strip())
+                    i += 1
+                joined = " ".join(text_parts).strip()
+                if joined:
+                    entries.append((start_sec, joined))
+            else:
+                i += 1
+    entries.sort(key=lambda x: x[0])
+    return entries
+
+
+def parse_srt(paths: list[Path]) -> list[tuple[int, str]]:
+    """SRT形式をフォールバックとしてパースする（sbvが無い場合のみ使用）。"""
+    entries: list[tuple[int, str]] = []
+    for path in paths:
+        with path.open(encoding="utf-8-sig", errors="replace") as f:
+            lines = f.read().replace("\r", "").splitlines()
+        i = 0
+        n = len(lines)
+        while i < n:
+            line = lines[i].strip()
+            m = SRT_TS_RE.fullmatch(line)
+            if m:
+                start_sec = to_sec(m.group(1))
+                i += 1
+                text_parts: list[str] = []
+                while i < n and lines[i].strip():
+                    if SRT_TS_RE.fullmatch(lines[i].strip()):
                         break
                     text_parts.append(lines[i].strip())
                     i += 1
@@ -139,9 +167,21 @@ def main() -> int:
     noise_words = DEFAULT_NOISE + [w.strip() for w in args.noise.split(",") if w.strip()]
     corner_words = DEFAULT_CORNER + [w.strip() for w in args.corner.split(",") if w.strip()]
 
-    # ---- sbv ----
+    # ---- sbv（優先） / srt（フォールバック） ----
     sbv_paths = find_files(base_dir, "*sbv*.txt", args.video_id)
+    sub_format = "SBV"
+    sub_paths = sbv_paths
     sbv = parse_sbv(sbv_paths)
+
+    if not sbv:
+        srt_paths = sorted(
+            set(find_files(base_dir, "*.srt", args.video_id))
+            | set(find_files(base_dir, "*srt*.txt", args.video_id))
+        )
+        if srt_paths:
+            sbv = parse_srt(srt_paths)
+            sub_format = "SRT (フォールバック)"
+            sub_paths = srt_paths
 
     # ---- live_chat（通常版 / OCR復元版）----
     cand = sorted(
@@ -174,15 +214,15 @@ def main() -> int:
     # ---- 検証: ここで止まったら先に進まない ----
     if not sbv:
         print(
-            f"ERROR: sbv のパースに失敗（0件）。入力ディレクトリ: {base_dir}"
+            f"ERROR: sbv / srt のパースに失敗（0件）。入力ディレクトリ: {base_dir}"
             + (f" / video_id={args.video_id}" if args.video_id else ""),
             file=sys.stderr,
         )
         return 1
 
     print(f"== 読み込み結果 ({base_dir}) ==")
-    print(f"  sbvファイル: {', '.join(p.name for p in sbv_paths)}")
-    print(f"  sbv: {len(sbv)}件 / 最終 {fmt(sbv[-1][0])}")
+    print(f"  字幕形式: {sub_format} / ファイル: {', '.join(p.name for p in sub_paths)}")
+    print(f"  字幕: {len(sbv)}件 / 最終 {fmt(sbv[-1][0])}")
     print(
         f"  chat: {len(chat)}件"
         + (f" (重複除去 {dup}件)" if dup else "")
@@ -196,7 +236,7 @@ def main() -> int:
         gran = step[0][0] if step else 0
         print(
             f"\n== !! OCR復元チャットモード（タイムスタンプ刻み: 約{gran}秒） !!\n"
-            f"  - チャット時刻は丸め済みの概算。出力の時刻は必ず sbv 側で確定すること\n"
+            f"  - チャット時刻は丸め済みの概算。出力の時刻は必ず字幕側で確定すること\n"
             f"  - 画面に写った分しか拾えないため件数は実際より少なく、上限で頭打ちになる\n"
             f"  - OCR誤読があるため、チャット文字列を固有名詞の裏取りに使わない"
         )
@@ -236,7 +276,7 @@ def main() -> int:
     print("\n== # コメント投稿数（上位＝運営候補。名前は内部判断のみに使う） ==")
     if not hashers:
         print(
-            "  なし（コマンド未使用の配信。sbv発言のみを起点にする）"
+            "  なし（コマンド未使用の配信。字幕発言のみを起点にする）"
             + ("／OCRでは先頭記号が脱落することがあるため、info の概要欄にコマンド説明があれば0件と断定しない" if ocr_mode else "")
         )
     for u, n in hashers.most_common(5):

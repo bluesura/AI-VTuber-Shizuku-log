@@ -1,0 +1,25 @@
+flowchart TD
+    Start(["ユーザー入力: 動画ID・URL / ログファイル / 思い出・思想 / NGワード・ファンマーク"]) --> StepM1["Step -1: 既存コメント & 公式チャプター確認"]
+    
+    StepM1 -->|"十分な既存目次あり"| EndSkip(["生成省略して完了 / 投稿後なら3分待って公開確認"])
+    StepM1 -->|"目次なし・不足"| Pre["Step 0〜2: build_timeline.py 実行<br/>(sbv優先 / 無ければsrtフォールバック)<br/>condensed.txt 通読・info確認"]
+    
+    Pre --> Research{"固有名詞・曲名が<br/>ログで確定できるか?"}
+    Research -->|"不明あり"| WebSearch["最小限のWeb検索で公式表記を確定"]
+    Research -->|"確定済み"| ModeBranch{"実行モード分岐"}
+    WebSearch --> ModeBranch
+
+    ModeBranch -->|"パターンA: さくっと指示"| DefaultRun["既定設定で即生成<br/>(話題階層型 × standard × バランス文字数 × パワーワード解禁)"]
+    DefaultRun --> CheckVerifyA["双方向照合 & NGワード・AI臭さチェック"]
+    CheckVerifyA --> SuggestAlt["出力 ＋ 末尾に他のおすすめ型を1行提案"]
+
+    ModeBranch -->|"パターンB: 通常依頼 / 思い出・こだわり語りあり"| Grill["grilling ラウンド制対話 (1回1〜3問・推奨案付き)"]
+    Grill --> SelectType["① 作成スタイル(型)を選択<br/>1. 厳選ハイライト型<br/>2. 話題階層・構造型 (├ └・時間なし補足)<br/>3. ここ好き・ファン特化型 (特殊性癖・感想添え)<br/>4. セトリ・インデックス型 (歌枠・ゲスト出入り)<br/>5. 区間リスト型 (ネタバレ完全ゼロ)"]
+    SelectType --> SelectTune["② 表現オプションを選択<br/>・トーン (標準/固め/やわらかめ/面白さ)<br/>・文字数 (短め〜20字 / バランス / 長め)<br/>・装飾 (罫線・括弧・*太字*・-打消し-) & 絵文字/ファンマーク<br/>・ネタバレ加減 & 言語 (日本語 / 指定言語 / 併記)"]
+    SelectTune --> CustomRun["指定方針でタイムスタンプ執筆<br/>(1〜5秒前フリ調整・ゲスト出入り明記)"]
+    CustomRun --> CheckVerifyB["双方向照合 (timeline.txt裏取り & 漏れ確認)<br/>NGワード除外 & AI臭さ排除"]
+
+    CheckVerifyB --> LenCheck{"8,000文字超過?"}
+    SuggestAlt --> LenCheck
+    LenCheck -->|"Yes"| SplitOut(["親コメント ＋ 返信コメントへ自動分割して出力"])
+    LenCheck -->|"No"| SingleOut(["1つのコードブロックで出力"])
