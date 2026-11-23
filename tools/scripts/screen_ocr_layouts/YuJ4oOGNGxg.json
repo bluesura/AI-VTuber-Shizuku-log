@@ -1,0 +1,7 @@
+{
+  "video_id": "YuJ4oOGNGxg",
+  "size": [1280, 720],
+  "regions": [
+    {"crop": [30, 556, 838, 126], "mode": "replace", "dark_on_light": true}
+  ]
+}

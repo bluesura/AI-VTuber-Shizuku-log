@@ -2,6 +2,21 @@
 
 YouTubeのライブ配信アーカイブからチャット部分の画像を抽出し、Pythonスクリプトで前処理を行った後、Google AI Studio（Gemini Pro）を利用して、重複のないタイムスタンプ付きテキストに変換するための全ワークフローです。
 
+## ローカルOCRで画面の発言欄を読む
+
+`ocr_youtube_overlay.py` は、対象の枠を切り抜き、画面に変化があった画像をCPUでOCRします。認識結果の語句はそのまま記録します。以下は `YuJ4oOGNGxg` の720p映像で、画面下部のしずくの発言欄を処理する例です。
+
+```powershell
+python -m pip install "rapidocr==3.10.0" onnxruntime
+python tools/scripts/ocr_youtube_overlay.py source.mkv --layout tools/scripts/screen_ocr_layouts/YuJ4oOGNGxg.json --workdir outputs/shizuku-screen-ocr/YuJ4oOGNGxg/full
+```
+
+FFmpegとffprobeをPATHに用意します。モデルは初回に `outputs/shizuku-screen-ocr/models/` に取得します。別の動画では、JSONの `video_id` と `size` を対応させ、`crop` に `[左, 上, 幅, 高さ]` をピクセルで指定します。画面構成が変わる動画は `start_ms` と `end_ms` を付けて `regions` を時間帯ごとに並べます。字幕が入れ替わる枠は `mode: "replace"`、上に流れる欄は `mode: "scroll"` を指定します。白地に黒字の水平な字幕枠では `dark_on_light: true` で行を切り出して認識できます。
+
+- `<動画ID>.screen-ocr.txt` は動画時刻付きの統合テキストです。白地に黒字の枠では字形が続く間の読みをまとめ、OCRで最も多く出た表記を載せます。`[要確認]` はスコアが低い箇所や、同じ表示で読みが割れた箇所を示します。時刻は採用した文字列を読んだフレームの位置です。
+- `frames.jsonl` に動画時刻、OCRを行った理由、文字列、スコア、切り抜き内の座標と画像名が残ります。`frames/` のPNGは確認用です。視聴者名を含む画像や生の認識結果は作業フォルダで扱います。
+- `--start-ms` と `--end-ms` で短い区間から試せます。既定の毎秒4枚で短い表示を落とす場合は `--fps` を上げます。`--all-frames` は間引きの影響を測る試験用です。処理枚数と時間は `stats.json` に記録します。
+
 ---
 
 ## 事前準備

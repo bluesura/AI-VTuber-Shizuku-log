@@ -6,6 +6,12 @@ AI VTuber「[しずく](https://shizuku.ai/)」の配信・動画・SNSの発言
 
 このREADMEは、資料の保存先と作業の入口を案内します。AIエージェントの実行規約は [AGENTS.md](AGENTS.md)、詳しい操作は各ツールの手順書を参照してください。
 
+## GitHubとFandom Wikiの役割
+
+GitHubには、収録したログと、その出所や検証過程を後から確かめるための記録を残します。Fandom Wikiでは、人が確認した事実を読者向けに整理し、元動画の該当時刻など、根拠へたどれる出典を添えます。
+
+収録済みの範囲、保存できていない資料、取得・加工の記録方法は [ログの保存と検証の方針](docs/archive-policy.md) にまとめています。
+
 ## 保存先と文書の役割
 
 ```text
@@ -35,6 +41,7 @@ Readme.md                       利用者向けの入口（本書）
 - `<動画ID>.ja.srt` / `*.ja.sbv.txt`：YouTubeから取得した字幕。自動字幕の誤認識に注意してください。
 - `<動画ID>.transcribe.txt`：字幕がない配信からローカルASRで生成した、未確認の文字起こし。
 - `<動画ID>.nemotron-3.5-transcribe.txt` / `<動画ID>.qwen3-asr-1.7b.txt`：既存字幕と比較するために、動画の音声から別途生成した未確認の文字起こし。
+- `<動画ID>.screen-ocr.txt`：動画内の発言欄を画面から読み取った、時刻付きの未確認テキスト。
 - `<動画ID>.live_chat.txt` / `*.comments.txt`：ライブチャット・通常コメント。一般視聴者名は匿名化しています。
 - `*.compiled.md`：AIで整形・要約した派生資料。事実の確認では元の字幕・チャット・動画へ戻ります。
 
@@ -50,7 +57,7 @@ Readme.md                       利用者向けの入口（本書）
 | 字幕の補完・日本語ASRの再生成 | [字幕なし配信の文字起こし](tools/workflows/字幕なし配信の文字起こし.md) |
 | 既存字幕と比較するNemotron文字起こし | [比較用の一括処理](tools/workflows/字幕なし配信の文字起こし.md#既存字幕と比較するnemotron文字起こし) |
 | 配信ログを整理・分析する | [分析ワークフロー](tools/prompts/shizuku_analysis/analysis_workflow_guide.md) |
-| 焼き付きチャットをOCRする | [Visual Chat-Timeline Sync](tools/workflows/Visual%20Chat-Timeline%20Syncの手順書.md) |
+| 動画内の発言欄・焼き付きチャットをOCRする | [Visual Chat-Timeline Sync](tools/workflows/Visual%20Chat-Timeline%20Syncの手順書.md) |
 | LLMで統合ログ・タイムスタンプを作る | [ログ整形の手順書](tools/workflows/youtube_log_prompt_v-divの手順書.md) |
 | YouTubeコメント用の目次を作る | [タイムスタンプ作成スキル](tools/skills/youtube_timestamp_comment_skill/README.md)。既存目次の充実度を確認→不足時にコメント再取得→必要な案を生成→ユーザーが手動投稿→公開コメントを再収録。YouTubeとWikiの一覧照合は別作業 |
 | Wiki記事を調査・提案・公開する | 下記「Fandom Wikiの編集」 |

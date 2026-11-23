@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """YouTube配信ログから癖・AI語・名言/迷言・物語候補を採掘する前処理スクリプト。
 
-sbv（優先）または srt と live_chat（通常/OCR）を突き合わせ、
+sbv（優先）または srt、画面OCR（screen-ocr.txt）と live_chat（通常/OCR）を突き合わせ、
 1) 通読用 (condensed.txt) と秒確定用 (timeline.txt) を生成
 2) info.txt から動画ID・URLを自動取得し、タイムスタンプ付きURL生成を支援
 3) AI語・空耳反応を 🟢高確度(3件以上) / 🟡候補(1-2件) で抽出し、直前の外国語フリ有無も確認
@@ -13,7 +13,6 @@ import argparse
 import glob
 import re
 import sys
-from collections import Counter
 from pathlib import Path
 
 REACT_WORDS = [
@@ -32,6 +31,7 @@ NOISE_WORDS = [
 
 SBV_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:\.\d+)?),(\d+(?::\d{2})+(?:\.\d+)?)")
 SRT_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:[.,]\d+)?)\s*-->\s*(\d+(?::\d{2})+(?:[.,]\d+)?)")
+SCREEN_OCR_RE = re.compile(r"^\[(\d+(?::\d{2})+(?:\.\d+)?)\]\s*(.*)$")
 CHAT_RE = re.compile(r"\s*\[(-?\d+(?::\d{2})+)\]\s*@?\s*(.+?)\s*[:：]\s*(.*)")
 
 
@@ -121,6 +121,34 @@ def parse_srt(paths: list[Path]) -> list[tuple[int, str]]:
     return entries
 
 
+def parse_screen_ocr(paths: list[Path]) -> list[tuple[int, str]]:
+    entries: list[tuple[int, str]] = []
+    for path in paths:
+        with path.open(encoding="utf-8-sig", errors="replace") as f:
+            lines = f.read().replace("\r", "").splitlines()
+        i, n = 0, len(lines)
+        while i < n:
+            line = lines[i].strip()
+            if not line or line.startswith("#"):
+                i += 1
+                continue
+            m = SCREEN_OCR_RE.match(line)
+            if m:
+                start_sec = to_sec(m.group(1))
+                parts = [m.group(2).strip()] if m.group(2).strip() else []
+                i += 1
+                while i < n and lines[i].strip() and not SCREEN_OCR_RE.match(lines[i].strip()):
+                    parts.append(lines[i].strip())
+                    i += 1
+                joined = "".join(parts).strip()
+                if joined:
+                    entries.append((start_sec, joined))
+            else:
+                i += 1
+    entries.sort(key=lambda x: x[0])
+    return entries
+
+
 def parse_chat(paths: list[Path]) -> tuple[list[tuple[int, str, str]], int]:
     chat: list[tuple[int, str, str]] = []
     unparsed = 0
@@ -171,9 +199,15 @@ def main() -> int:
             subs = parse_srt(srt_paths)
             sub_format = "SRT (フォールバック)"
 
-    if not subs:
-        print(f"ERROR: 字幕（sbv/srt）が見つかりません: {base_dir}", file=sys.stderr)
+    screen_ocr_paths = find_files(base_dir, "*screen-ocr*.txt", video_id)
+    screen_ocr = parse_screen_ocr(screen_ocr_paths) if screen_ocr_paths else []
+
+    if not subs and not screen_ocr:
+        print(f"ERROR: 字幕（sbv/srt/screen-ocr）が見つかりません: {base_dir}", file=sys.stderr)
         return 1
+    if not subs and screen_ocr:
+        subs = screen_ocr
+        sub_format = "Screen-OCR"
 
     cand = sorted(set(find_files(base_dir, "*live_chat*.txt", video_id)) | set(find_files(base_dir, "*chat*ocr*.txt", video_id)))
     ocr_paths = [p for p in cand if "ocr" in p.name.lower()]
@@ -198,8 +232,11 @@ def main() -> int:
     timeline_path = out_dir / "timeline.txt"
     with timeline_path.open("w", encoding="utf-8") as f:
         for t, text in subs:
+            near_ocr = [otext for ot, otext in screen_ocr if t - 10 <= ot <= t + 10]
             near = [c for ct, _, c in chat if t - pad_b <= ct <= t + pad_a]
             f.write(f"[{fmt(t)}] SUB: {text}\n")
+            for otext in near_ocr[:2]:
+                f.write(f"          OCR: {otext}\n")
             for c in near[:6]:
                 f.write(f"          chat: {c}\n")
 
@@ -211,9 +248,12 @@ def main() -> int:
         t = t_start
         while t < t_end:
             txt = "".join(x for s, x in subs if t <= s < t + win)
+            ocrs = [otext for ot, otext in screen_ocr if t <= ot < t + win]
             cs = [c for ct, _, c in chat if t <= ct < t + win]
-            if txt.strip() or cs:
+            if txt.strip() or ocrs or cs:
                 f.write(f"[{fmt(t)}] {txt}\n")
+                for otext in ocrs:
+                    f.write(f"   [OCR] {otext}\n")
                 if cs:
                     f.write("   >> " + " / ".join(cs[:10]) + "\n")
             t += win
@@ -221,7 +261,8 @@ def main() -> int:
     print("== 採掘準備完了 ==")
     print(f"  タイトル: {title_info or '(不明)'}")
     print(f"  ベースURL: {base_url or '(不明)'}")
-    print(f"  字幕: {sub_format} {len(subs)}件 (最終 {fmt(subs[-1][0])}) / chat: {len(chat)}件" + (" [OCRモード]" if ocr_mode else ""))
+    ocr_info = f" / screen-ocr: {len(screen_ocr)}件" if screen_ocr else ""
+    print(f"  字幕: {sub_format} {len(subs)}件 (最終 {fmt(subs[-1][0])}){ocr_info} / chat: {len(chat)}件" + (" [OCRモード]" if ocr_mode else ""))
     print(f"  出力: {condensed_path} / {timeline_path}")
 
     # 1) AI語・空耳反応バケット（🟢高確度 >=3件 / 🟡候補 1-2件）
