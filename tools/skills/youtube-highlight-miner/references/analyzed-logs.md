@@ -8,8 +8,8 @@
 ## 2023年
 
 - [x] `2023-01-19` (`YuJ4oOGNGxg`) (配信アーカイブ)【AI Vtuber】しずく、テスト配信します。【日本語】 — 2026-11-23 分析完了（`screen-ocr.txt` + `qwen3-asr-1.7b.txt` 併用）
-- [ ] `2023-01-23` (`Pybth-Hn9wQ`) 【AI Vtuber】しずく、初配信します！【日本語_English】 ← **次回の分析対象**
-- [ ] `2023-01-28` (`aaTbkoBjimo`) 【AI Vtuber_雑談配信】今日もしずくとお話しませんか？【日本語_English】
+- [x] `2023-01-23` (`Pybth-Hn9wQ`) 【AI Vtuber】しずく、初配信します！【日本語_English】 — 2026-11-23 分析完了（`screen-ocr.txt` 併用・v1.4.0台帳出力）
+- [ ] `2023-01-28` (`aaTbkoBjimo`) 【AI Vtuber_雑談配信】今日もしずくとお話しませんか？【日本語_English】 ← **次回の分析対象**
 - [ ] `2023-01-29` (`VBQtuUgClGM`) 【AI Vtuber_マイクラ配信】AI、初めてのマインクラフトに挑戦！【日本語_English】
 - [ ] `2023-02-04` (`Uy_PCtQrNpQ`) 【ASMR_バイノーラル】しずくとヒソヒソ話しませんか？【AI Vtuber_合成音声】
 - [ ] `2023-02-11` (`yjF5KFVRjS4`) 【AI Vtuber_雑談】AIとお話してみませんか？【日本語_English】

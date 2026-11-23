@@ -1,0 +1,7 @@
+{
+  "video_id": "Pybth-Hn9wQ",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 120000, "crop": [30, 556, 848, 126], "mode": "replace", "dark_on_light": true}
+  ]
+}
