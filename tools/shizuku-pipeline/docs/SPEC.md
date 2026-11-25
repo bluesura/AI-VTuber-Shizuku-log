@@ -94,7 +94,7 @@ candidate ──VERIFY(逐語確定)──▶ verified ──ADOPT──▶ appr
 
 ```
 s0_intake.py   --src <dir> [--dry-run] [--verbose]
-s1_normalize.py --all | --stream <vid>
+s1_normalize.py --all | --stream <vid> | --x
 s2_pack.py     --all [--redo] | --stream <vid> | --x <YYYY-MM> | --status
                [--split N] [--max-chars 90000]
 s2_ingest.py   --file <jsonl> --from stream:<vid>|x:<YYYY-MM>
@@ -136,7 +136,24 @@ repair_cards.py (引数なし=ドライラン) | --apply           # 既存カ�
 - チャット: `[H:MM:SS] @User_xxxx: 本文`（負時刻=開始前）。OCR復元は `@` が空でも解釈可、時刻は粗い。
 - 事後コメント: `[YYYY-MM-DD ... UTC] @User（👍 n）` ヘッダ＋本文。本文中の `mm:ss` をタイムスタンプ参照として抽出。
 - info: `タイトル:` `投稿日:` `動画ID:` `URL:` ＋ 説明ブロック。
-- Xログ: TSV。1行目に `URL`/`日付` 等のヘッダ。`日付` はUTC ISO8601 → S1でJST変換。本文/引用内容/いいね数/表示数等。「なし」のみのファイルは空記録として扱う。
+- Xログ: [新形式の20列TSV](../../../docs/x-log-spec.md) と旧形式の `URL` / `日付` を含むTSVを受け付ける。「なし」のみのファイルは空記録として扱う。S0は `logs/twitter(x)/<ハンドル>/` から `data/raw/x/<ハンドル>/` に相対パスを保ってコピーする。S1とdoctorは `data/raw/x/` 以下を再帰的に読み、従来の直下配置も受け付ける。
+- S1の月別JSONLは既存のUTC日付（`date_utc` は `YYYY-MM-DD`）、JST日付・時刻、本文、数値または `null` の反応数を維持する。新形式は `post_id` から `https://x.com/i/status/{post_id}` を生成し、URL・引用・返信・メディア・取得日・取得経路・品質フラグの列をそのまま保持する。旧形式はURLを保持し、対応する列がある値を引き継ぐ。
+- 新旧で同じ投稿IDがあれば新形式を優先する。`RETWEET` は月別JSONLと後続の発言抽出から除外する。`--x` でXだけを再構築できる。
+- S2のX抽出パックは月別JSONLの `author` と `quote_author` を含む。取込時に `post_id` で正規化済み投稿を引き、`author` が `Shizuku_AItuber` と確認できる投稿だけをXの `quote_candidate` として受理する。他アカウントの資料は `event` や `capability` などに使える。
+
+### Xログ移行用の再構築（Phase 2）
+
+`scripts/reconstruct_x_from_fxtwitter.py` は、本流のS0〜S5から独立したローカル変換ツール。
+列定義・匿名化は [Xログ仕様書](../../../docs/x-log-spec.md)、工程の境界は [移行計画](../../../docs/x-data-migration-plan.md) を正とする。
+
+- リポジトリルートで `python tools/shizuku-pipeline/scripts/reconstruct_x_from_fxtwitter.py --src-dir <旧形式TSVの控え> --dry-run` を実行すると、ファイルを出力せず変換統計を表示する。
+- `--out-dir outputs/x_reconstructed` で20列の新スキーマTSVを出力する。入力として指定したディレクトリからの相対パスを保つ。相対指定の入力先と出力先はリポジトリルート基準。元ログのディレクトリは出力先に指定できない。
+- 保存済み監査JSONのHTTPステータス・APIコード・`payload.status.id` を確認し、`raw_text.display_text_range` と `url` / 表示範囲内の `media` facetsから本文・URLを復元する。範囲外の添付リンクは本文へ追加しない。列数不一致・重複ID・投稿者や日時の不一致・不正な応答はエラーとして停止する。
+- 一般視聴者の引用本文は保存せず、本文中の明示的なメンション・Xリンクにも匿名化を適用する。Xハンドルは小文字化して既存の共通ソルト（`YT_ANON_SALT`、未指定時はYouTube収集と同じ既定値）でハッシュ化し、既存の `User_XXXXXXXX` は再ハッシュしない。異なるサービスの表示名とXハンドルから同一人物を推定しない。
+- 反応数と `metrics_date` は旧ログを保持し、`snapshot_date` は保存応答の取得日時（JST）から記録する。`--use-fx-metrics` を明示した場合だけ保存応答の反応数へ変更する。`--hide-general-reply-id` は一般視聴者の返信先IDも隠す任意指定で、既定では確認導線を保持する。
+- 保存応答がない行は `source_method=web_dom`・`no_emoji` として移行し、投稿者不明の旧引用本文は保存しない。「なし」の空期間ファイルはスキップする。返信先が取得できない行は `missing_parent` を残す。
+
+差し替え前に、変換候補のID集合・反応数・匿名化を検証する。返信先をPhase 3で補完した行は `source_method=web_dom+fx+fx_thread` を使う。差し替え後はS0で取り込み用コピーを同期し、S1とdoctorで月別件数と品質フラグを確認する。
 
 ## 11. gate一覧（迂回禁止）
 

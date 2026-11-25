@@ -43,7 +43,7 @@ logs/ ─▶ S0 intake ─▶ raw/ ─▶ S1 normalize ─▶ normalized/ ─▶
 ```
 
 層の役割:
-- **raw層** (`data/raw/`): logsのバイト単位コピー＋`origin.json`（出所記録）。不変。
+- **raw層** (`data/raw/`): logsのバイト単位コピー。配信は `origin.json` に出所を記録し、Xは `raw/x/<ハンドル>/` に相対パスを保つ。
 - **normalized層** (`data/normalized/`): 決定的変換の結果。ここで初めて辞書補正・文再結合・JST変換・シグナル検出が入る。
   - `sentences.tsv`: `t / mmss / url / asr(原文) / norm(補正後)`。**asrとnormを併存**させ、原文を失わない。
   - `chat.tsv`: チャット原文（補正しない）。

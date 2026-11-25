@@ -106,25 +106,37 @@ def main():
     # --- Xログ ---
     R.append("## D01/D05/D06 Xログ検査")
     xr = DATA / "raw" / "x"
-    invalid = []
-    for f in sorted(xr.glob("*")):
-        txt = read(f)
-        if not txt.strip() or "URL" not in txt.splitlines()[0]:
-            invalid.append(f.name)
+    invalid, empty = [], []
+    for f in x_log_files(xr):
+        relative = f.relative_to(xr).as_posix()
+        try:
+            txt = f.read_text(encoding="utf-8-sig")
+        except UnicodeError:
+            invalid.append(relative)
+            continue
+        if txt.strip() in X_EMPTY_RECORDS:
+            empty.append(relative)
+        elif not {"URL", "post_id"}.intersection(x_log_header(txt)):
+            invalid.append(relative)
     if invalid:
-        add("WARN", "D06", f"TSVとして読めないXログ: {', '.join(invalid)} （「なし」等の空記録。休眠期なら正常 → §6）")
-    months, authors, cross = {}, Counter(), 0
+        add("WARN", "D06", f"TSVとして読めないXログ: {', '.join(invalid)} → §6")
+    if empty:
+        add("WARN", "D06", f"空記録のXログ: {', '.join(empty)} （「なし」等。休眠期なら正常 → §6）")
+    months, authors, flags, cross = {}, Counter(), Counter(), 0
     for p in sorted((DATA / "normalized" / "x").glob("*.jsonl")):
         recs = jsonl_read(p)
         months[p.stem] = len(recs)
         for r in recs:
             authors[r.get("author", "?")] += 1
             if r.get("date_utc") and r["date_utc"] != r["date_jst"]: cross += 1
+            flags.update(set(r.get("quality_flags", "").split("|")) - {""})
     total = sum(months.values())
     if total:
         add("INFO", "D01", f"UTC→JSTで日付が変わったポスト: {cross}/{total}件 ({100*cross//total}%) — s1で変換済み → §1")
-        add("INFO", "D05", "投稿者の内訳: " + " ".join(f"{a}:{c}" for a, c in authors.most_common(3)) +
-            " ｜ あき先生アカ(@cumulo_autumn)と報道は別経路で収集が必要 → §5")
+        add("INFO", "D05", "投稿者の内訳: " + " ".join(f"{a}:{c}" for a, c in authors.most_common()) + " → §5")
+        if flags:
+            add("INFO", "D07", "X品質フラグ（重複あり）: " +
+                " / ".join(f"{flag}:{count}" for flag, count in sorted(flags.items())))
         ms = sorted(months)
         gaps = []
         if ms:

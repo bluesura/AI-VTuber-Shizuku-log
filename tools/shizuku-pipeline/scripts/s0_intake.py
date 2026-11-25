@@ -13,7 +13,7 @@
 import argparse, json, re, shutil, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
-from shizulib import DATA, read, write, load_known_absent, load_relations
+from shizulib import DATA, X_EMPTY_RECORDS, read, write, load_known_absent, load_relations, x_log_header
 
 SKIP_DIRS = {".git", ".github", "node_modules", "__pycache__", ".venv"}
 VID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -59,12 +59,15 @@ def date_from_text(s):
 
 def sniff_x(path):
     try:
-        head = read(path)[:400]
-    except Exception:
+        with path.open(encoding="utf-8-sig") as source:
+            head = source.read(4096)
+    except (OSError, UnicodeError):
         return None
-    first = next((l for l in head.split("\n") if l.strip()), "")
-    if "\t" in first and ("URL" in first or "日付" in first): return "tsv"
-    if head.strip() in ("なし", "無し", "なし。", ""): return "empty"
+    header = set(x_log_header(head))
+    if {"URL", "日付"} <= header or {"post_id", "date_utc"} <= header:
+        return "tsv"
+    if head.strip() in X_EMPTY_RECORDS:
+        return "empty"
     return None
 
 def main():
@@ -84,6 +87,13 @@ def main():
             info_count[f.parent] = info_count.get(f.parent, 0) + 1
 
     groups, xcands, ignored, discord, misfiled = {}, [], [], [], []
+    x_source = src / "logs" / "twitter(x)"
+    if not x_source.is_dir():
+        x_source = next(
+            (parent for parent in (src, *src.parents) if parent.name.lower() == "twitter(x)"),
+            src / "twitter(x)",
+        )
+    has_canonical_x = x_source.is_dir()
     for f in sorted(src.rglob("*")):
         if not f.is_file(): continue
         if any(p in SKIP_DIRS for p in f.parts): continue
@@ -103,7 +113,8 @@ def main():
             g = groups.setdefault(key, {"files": {}, "dir": f.parent})
             g["files"].setdefault(kind, f)
         elif f.suffix.lower() in (".txt", ".tsv"):
-            if sniff_x(f): xcands.append(f)
+            kind_x = sniff_x(f) if not has_canonical_x or x_source in f.parents else None
+            if kind_x: xcands.append((f, kind_x))
             else: ignored.append(f)
         else:
             ignored.append(f)
@@ -187,13 +198,13 @@ def main():
         ok += 1; warn += bool(missing)
 
     print("=== Xログ ===")
-    for f in xcands:
-        kindx = sniff_x(f)
+    for f, kindx in xcands:
+        relative = f.relative_to(x_source) if has_canonical_x else Path(f.name)
         if not a.dry_run:
-            d = DATA / "raw" / "x" / f.name
-            if not (d.exists() and d.stat().st_size == f.stat().st_size):
+            d = DATA / "raw" / "x" / relative
+            if not d.exists() or d.read_bytes() != f.read_bytes():
                 d.parent.mkdir(parents=True, exist_ok=True); shutil.copy(f, d)
-        print(f"  [{'OK  ' if kindx=='tsv' else '空  '}] {f.name}" +
+        print(f"  [{'OK  ' if kindx=='tsv' else '空  '}] {relative.as_posix()}" +
               ("" if kindx == "tsv" else "  ※中身が「なし」＝記録上の空。休眠期なら正常（DATA-ISSUES §6）"))
 
     if discord:

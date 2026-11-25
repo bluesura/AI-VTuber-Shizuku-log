@@ -17,7 +17,7 @@ GitHubには、収録したログと、その出所や検証過程を後から�
 ```text
 logs/
   youtube/<年>/<日付_タイトル>/   動画情報・字幕・チャット・コメント
-  twitter(x)/                   Xの収集ログ
+  twitter(x)/<ハンドル>/        Xの収集ログ（年・月別TSV）
 persona/                        人格・特性・エピソード等の分析資料
 tools/                         下記の収集・分析・編集ツール
 outputs/                        中間データ・調査案・実行結果（Git管理外）
@@ -54,6 +54,7 @@ Readme.md                       利用者向けの入口（本書）
 | 作業 | 入口 |
 |---|---|
 | 終了済みの未収録配信を追加する | 下記「ログの更新」 |
+| 未収録の X 投稿をアカウント別に追加する | [Xログの収集・統合手順](tools/workflows/x_collection_workflow.md) |
 | 字幕の補完・日本語ASRの再生成 | [字幕なし配信の文字起こし](tools/workflows/字幕なし配信の文字起こし.md) |
 | 既存字幕と比較するNemotron文字起こし | [比較用の一括処理](tools/workflows/字幕なし配信の文字起こし.md#既存字幕と比較するnemotron文字起こし) |
 | 配信ログを整理・分析する | [分析ワークフロー](tools/prompts/shizuku_analysis/analysis_workflow_guide.md) |

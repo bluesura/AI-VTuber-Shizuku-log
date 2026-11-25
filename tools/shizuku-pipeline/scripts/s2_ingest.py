@@ -83,6 +83,7 @@ def main():
         if kind not in VALID_KINDS:
             warns.append(f"{i}行目: kind不正 '{kind}' → 破棄"); continue
         src = c.get("source") or {}
+        source_post = x_idx.get(str(src.get("post_id", "")))
         # source補完
         if mode == "stream":
             src.setdefault("type", "yt"); src.setdefault("video_id", key)
@@ -91,7 +92,13 @@ def main():
         else:
             src.setdefault("type", "x")
             base = f"x-{src.get('post_id','unknown')}"
-            if src.get("post_id") in x_idx: src.setdefault("url", x_idx[src["post_id"]]["url"])
+            if source_post:
+                src.setdefault("url", source_post["url"])
+        if kind == "quote_candidate" and (mode == "x" or src.get("type") == "x"):
+            author = (source_post or {}).get("author") or ""
+            if author.strip().lstrip("@").casefold() != SHIZUKU_X_HANDLE.casefold():
+                warns.append(f"{i}行目: 投稿者を {SHIZUKU_X_HANDLE} と確認できないX名言候補 → 破棄")
+                continue
         c["source"] = src
         # 逐語ルールの機械検証（ゲート1の前段）
         def check_part(text, claimed):
@@ -104,8 +111,7 @@ def main():
                 if claimed: return False, "チャット原文と一致せず → verbatim=false"
                 return False, None
             else:
-                rec = x_idx.get(src.get("post_id"))
-                pool = ((rec.get("text","") + "\n" + rec.get("quote_text","")) if rec
+                pool = ((source_post.get("text","") + "\n" + source_post.get("quote_text","")) if source_post
                         else "\n".join(r["text"] + "\n" + (r.get("quote_text") or "") for r in x_idx.values()))
                 if text and text in pool: return True, None
                 return False, "X原文と一致せず → verbatim=false"

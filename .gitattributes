@@ -1,2 +1,8 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# XログTSVはLF。行末タブは空の最終列を表す。
+logs/twitter(x)/**/*.txt text eol=lf whitespace=-blank-at-eol
+logs/twitter(x)/**/*.tsv text eol=lf whitespace=-blank-at-eol
+tools/shizuku-pipeline/data/raw/x/**/*.txt text eol=lf whitespace=-blank-at-eol
+tools/shizuku-pipeline/data/raw/x/**/*.tsv text eol=lf whitespace=-blank-at-eol

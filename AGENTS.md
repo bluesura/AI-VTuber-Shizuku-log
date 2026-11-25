@@ -19,7 +19,7 @@ AI VTuber「しずく」の配信・動画・SNSの発言を保存し、検索�
 ## ディレクトリ構成
 
 - `logs/youtube/<年>/<日付_タイトル>/`: YouTubeの動画情報、字幕、ライブチャット、コメント。アーカイブの一次資料です。
-- `logs/twitter(x)/`: Xの収集ログ。
+- `logs/twitter(x)/<ハンドル>/`: Xの収集ログ（年・月別TSV）。[収集・統合手順](tools/workflows/x_collection_workflow.md)
 - `persona/`: ログから導いた人格・安定特性・エピソード・観測・出力資料と生成用プロンプト。
 - `tools/scripts/`: 収集、匿名化、字幕変換、伏せ字化、画像処理用の単体スクリプト。
 - `tools/prompts/`: ログ整形・分析・抽出用プロンプト。

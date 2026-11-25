@@ -2,7 +2,8 @@
 """ステップ1: 決定的正規化（LLM不使用）。
 使い方:
   python scripts/s1_normalize.py --all            # 未処理の配信を日付順に全部 + Xログ
-  python scripts/s1_normalize.py --stream <vid>   # 1配信だけ
+  python scripts/s1_normalize.py --stream <vid>   # 1配信 + Xログ
+  python scripts/s1_normalize.py --x              # Xログだけ
 出力（配信ごと data/normalized/streams/{vid}/）:
   sentences.tsv  … t秒 / 時刻 / URL / asr(辞書補正前) / norm(補正後)
   chat.tsv       … t秒 / 時刻 / ユーザー / 本文（原文のまま・補正しない）
@@ -128,36 +129,81 @@ def process_stream(d, fixes, fams, desc_state, first):
     print(f"  {date} {vid}[{subfmt}]: {len(blocks)}ブロック→{len(rows)}文 / チャット{len(chat)}件{'(OCR)' if chat_src=='ocr' else ''} / "
           f"辞書適用{fix_total}箇所 / バースト{len(bursts)} / ミスマッチ{len(mism)}区間 / 概要欄新規行{len(novel)}")
 
+X_LEGACY_COLUMNS = {
+    "date_utc": "日付", "author": "投稿者", "type": "種類", "text": "本文",
+    "extracted_urls": "抽出URL", "quote_text": "引用内容", "media_urls": "メディアURL",
+    "likes": "いいね数", "reposts": "リポスト数", "replies": "返信数", "views": "表示数",
+}
+X_TEXT_COLUMNS = (
+    "type", "author", "text", "quote_text", "extracted_urls", "quote_post_id", "quote_author",
+    "reply_to_post_id", "reply_to_author", "media_urls", "snapshot_date", "metrics_date",
+    "source_method", "quality_flags",
+)
+X_METRIC_COLUMNS = ("likes", "reposts", "replies", "views")
+X_REQUIRED_COLUMNS = {"post_id", "date_utc", *X_TEXT_COLUMNS, *X_METRIC_COLUMNS}
+
+
+def read_x_posts(path, *, label=None):
+    label = label or path.name
+    with path.open(encoding="utf-8-sig", newline="") as source:
+        txt = source.read()
+    if txt.strip() in X_EMPTY_RECORDS:
+        print(f"  - {label}: 空記録（「なし」）としてスキップ ＝ 休眠期なら正常")
+        return
+    reader = csv.DictReader(io.StringIO(txt.lstrip("\r\n"), newline=""), delimiter="\t", strict=True)
+    header = reader.fieldnames or []
+    current = "post_id" in header
+    required = X_REQUIRED_COLUMNS if current else {"URL", "日付"}
+    if not required.issubset(header) or len(set(header)) != len(header):
+        print(f"  ! {label}: XログのTSVヘッダが不完全（DATA-ISSUES §6 参照）")
+        return
+    for row in reader:
+        if None in row or (current and None in row.values()):
+            print(f"  ! {label}:{reader.line_num}: TSVの列数が不一致")
+            continue
+
+        def col(name):
+            key = name if current else X_LEGACY_COLUMNS.get(name, name)
+            return row.get(key) or ""
+
+        url = col("URL").strip()
+        pid = col("post_id").strip() if current else x_status_id(url)
+        try:
+            if not re.fullmatch(r"[0-9]+", pid):
+                raise ValueError("post_id")
+            date_jst, time_jst, date_utc = utc_to_jst(col("date_utc"))
+        except ValueError:
+            print(f"  ! {label}:{reader.line_num}: 投稿IDまたは日時が不正")
+            continue
+        record = {
+            "post_id": pid, "url": f"https://x.com/i/status/{pid}" if current else url,
+            "date_jst": date_jst, "time_jst": time_jst, "date_utc": date_utc,
+        }
+        record.update({key: col(key) for key in X_TEXT_COLUMNS})
+        if not current:
+            record["quote_post_id"] = x_status_id(col("引用URL"))
+        for key in X_METRIC_COLUMNS:
+            value = col(key).replace(",", "").strip()
+            record[key] = int(value) if re.fullmatch(r"[0-9]+", value) else None
+        yield current, record
+
+
 def process_x():
     rows_by_id = {}
-    for f in sorted((DATA / "raw" / "x").glob("*.tsv")) + sorted((DATA / "raw" / "x").glob("*.txt")):
-        txt = read(f).replace("\r\n", "\n")
-        if txt.strip() in ("なし", "無し", "なし。", ""):
-            print(f"  - {f.name}: 空記録（「なし」）としてスキップ ＝ 休眠期なら正常"); continue
-        if "URL" not in txt.splitlines()[0]:
-            print(f"  ! {f.name}: TSVヘッダが無い（DATA-ISSUES §6 参照）"); continue
-        rd = csv.reader(io.StringIO(txt), delimiter="\t")
-        header = next(rd)
-        idx = {h: i for i, h in enumerate(header)}
-        def col(r, name):
-            i = idx.get(name); return r[i] if i is not None and i < len(r) else ""
-        for r in rd:
-            if not r or not col(r, "URL"): continue
-            url = col(r, "URL"); pid = url.rstrip("/").split("/")[-1]
-            try:
-                dj, tj, du = utc_to_jst(col(r, "日付"))
-            except Exception:
-                continue
-            def num(name):
-                v = col(r, name).replace(",", "").strip()
-                return int(v) if v.isdigit() else None
-            rows_by_id[pid] = {"post_id": pid, "url": url, "date_jst": dj, "time_jst": tj,
-                               "date_utc": du, "type": col(r, "種類"), "author": col(r, "投稿者"),
-                               "text": col(r, "本文"), "quote_text": col(r, "引用内容"),
-                               "likes": num("いいね数"), "reposts": num("リポスト数"),
-                               "replies": num("返信数"), "views": num("表示数")}
+    current_ids = set()
+    x_root = DATA / "raw" / "x"
+    for path in x_log_files(x_root):
+        for current, record in read_x_posts(path, label=path.relative_to(x_root).as_posix()):
+            pid = record["post_id"]
+            # 新旧が重複するときは、補完済みの新形式を優先する。
+            if current or pid not in current_ids:
+                rows_by_id[pid] = record
+            if current:
+                current_ids.add(pid)
     months = {}
     for rec in rows_by_id.values():
+        if rec["type"] == "RETWEET":
+            continue
         months.setdefault(rec["date_jst"][:7], []).append(rec)
     for m, recs in sorted(months.items()):
         recs.sort(key=lambda r: (r["date_jst"], r["time_jst"]))
@@ -167,9 +213,14 @@ def process_x():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--all", action="store_true")
-    ap.add_argument("--stream")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--all", action="store_true")
+    mode.add_argument("--stream")
+    mode.add_argument("--x", action="store_true", help="配信や処理状態に触れずXログだけを正規化")
     a = ap.parse_args()
+    if a.x:
+        process_x()
+        return
     fixes, fams = load_fixes(), load_lexicon()
     manifest = load_state("manifest.json", {})
     desc_state = load_state("desc_lines.json", {})
@@ -177,7 +228,7 @@ def main():
     targets = dirs if a.all else ([find_stream(a.stream)] if a.stream else [])
     targets = [d for d in targets if d]
     if not targets and not a.all:
-        print("対象なし。--all か --stream <vid> を指定してください。"); return
+        print("対象なし。--all、--stream <vid>、--x のいずれかを指定してください。"); return
     print("=== 配信の正規化 ===")
     for d in targets:
         first = (len(desc_state) == 0)

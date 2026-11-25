@@ -118,7 +118,7 @@ def build_x(month, split=1, max_chars=0, quiet=False):
     made = []
     for i, ch in enumerate(chunks, 1):
         body = "\n".join(json.dumps({k: r[k] for k in
-            ("post_id", "url", "date_jst", "time_jst", "type", "text", "quote_text", "likes", "views") if k in r},
+            ("post_id", "url", "date_jst", "time_jst", "author", "type", "text", "quote_author", "quote_text", "likes", "views") if k in r},
             ensure_ascii=False) for r in ch)
         part = f"（パート {i}/{len(chunks)}）\n" if len(chunks) > 1 else ""
         out = DATA / "packs" / (f"extract_x_{month}" + (f"_part{i}" if len(chunks) > 1 else "") + ".txt")

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """shizuku-pipeline 共通ライブラリ（標準ライブラリのみ・追加インストール不要）"""
-import json, re, hashlib
+import csv, json, re, hashlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -70,6 +70,26 @@ def jdate(d):  # '2026-03-09' -> '2026年3月9日'（スキル§3-1: 地の文�
     return f"{y}年{int(m)}月{int(dd)}日"
 
 # ---------- パーサ ----------
+X_EMPTY_RECORDS = {"", "なし", "無し", "なし。"}
+X_STATUS_PATH = re.compile(r"/status/([0-9]+)(?=[/?#]|$)")
+SHIZUKU_X_HANDLE = "Shizuku_AItuber"
+
+
+def x_log_files(directory):
+    """直下の旧配置とアカウント別のXログを同じ順序で列挙する。"""
+    return [p for pattern in ("*.tsv", "*.txt") for p in sorted(directory.rglob(pattern)) if p.is_file()]
+
+
+def x_log_header(text):
+    first = next((line for line in text.lstrip("\ufeff").splitlines() if line.strip()), "")
+    return next(csv.reader([first], delimiter="\t"))
+
+
+def x_status_id(url):
+    match = X_STATUS_PATH.search(url)
+    return match[1] if match else ""
+
+
 def parse_sbv(path):
     """SBV -> [(t_sec, text)]（ブロック単位・生テキスト）"""
     raw = read(path).replace("\r\n", "\n")

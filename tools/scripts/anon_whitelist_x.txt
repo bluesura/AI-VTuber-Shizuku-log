@@ -1,0 +1,13 @@
+# X（Twitter）ログ用の匿名化ホワイトリスト追加定義
+# ・既存 tools/scripts/anon_whitelist.txt と併用し、X上で関係性を実名（実ハンドル）保持するアカウントを記載する
+# ・先頭の @ と大文字・小文字は無視して照合する
+
+# --- 開発者・運営・公式関連 ---
+Shizuku_AItuber
+cumulo_autumn
+Nya6y
+AIVtuber_Shizuku
+
+# --- 共演・コラボAI VTuber / VTuber（必要に応じて追記） ---
+AIdol_Nagisa
+AITuber_Mare
