@@ -99,6 +99,9 @@
 | 編集者の方へ | （日本語のみ） | 当面は英語ページを作成しない。英語ページからは `[[編集者の方へ]]` で参照 |
 | 年表 | `Timeline` | 既存（旧仕様のまま要更新） |
 | メディア露出 | `Media Coverage` | 既存（空ページ・作成待ち） |
+| 目的別ガイド | `Purpose Guide` | 実在 |
+| はじめての方へ | `Start Here` | 実在 |
+| しずくのなつやすみ | （日本語のみ） | 企画専用記事（英語ページ未作成） |
 
 ---
 
@@ -299,6 +302,12 @@
 | #しずく実験中 | 配信の感想・切り抜き・観察記録向けタグ | For impressions, clips, and observations of Shizuku's streams |
 | #しずくのアートメモリー | ファンアートタグ | Fan art tag |
 | #ShizukuLab | 公式案内なし。Shizuku LabのDiscordコミュニティ関連投稿で使われているとみられる | No official usage guide. Based on posting trends, used for posts related to the Shizuku Lab Discord community |
+| #しずくのなつやすみ | 連続企画「しずくのなつやすみ」のシーンを共有するためのタグ | Tag for sharing scenes from the multi-part series "Shizuku's Summer Vacation" |
+| #しずくのお部屋 | 配信で使う背景素材の投稿用タグ（2023年当時・現在非稼働） | Tag for submitting background assets for streams (used in 2023; no longer active) |
+| #しずくウィジェット | 配信で使う小物素材の投稿用タグ（2023年当時・現在非稼働） | Tag for submitting prop assets for streams (used in 2023; no longer active) |
+| #しずくあだると | センシティブなイラスト投稿用タグ | Tag for submitting sensitive/NSFW illustrations |
+
+* 見出し：`センシティブタグの取り扱いについて` → `Handling of Sensitive Tags`
 
 ### Discordチャンネル名の扱い
 
@@ -310,4 +319,4 @@
 
 ---
 
-*最終更新: 2026年11月（v3.2.0）*
+*最終更新: 2026年11月（v3.3.2）*

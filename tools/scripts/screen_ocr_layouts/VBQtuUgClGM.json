@@ -1,0 +1,7 @@
+{
+  "video_id": "VBQtuUgClGM",
+  "size": [1920, 1080],
+  "regions": [
+    {"start_ms": 1330000, "end_ms": 7312000, "crop": [70, 893, 1320, 152], "mode": "replace", "dark_on_light": true}
+  ]
+}

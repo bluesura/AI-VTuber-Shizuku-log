@@ -58,7 +58,7 @@ Readme.md                       利用者向けの入口（本書）
 | 字幕の補完・日本語ASRの再生成 | [字幕なし配信の文字起こし](tools/workflows/字幕なし配信の文字起こし.md) |
 | 既存字幕と比較するNemotron文字起こし | [比較用の一括処理](tools/workflows/字幕なし配信の文字起こし.md#既存字幕と比較するnemotron文字起こし) |
 | 配信ログを整理・分析する | [分析ワークフロー](tools/prompts/shizuku_analysis/analysis_workflow_guide.md) |
-| 動画内の発言欄・焼き付きチャットをOCRする | [Visual Chat-Timeline Sync](tools/workflows/Visual%20Chat-Timeline%20Syncの手順書.md) |
+| 動画内の発言欄・焼き付きチャットをOCRする | [Visual Chat-Timeline Sync](tools/workflows/Visual%20Chat-Timeline%20Syncの手順書.md) · [画面OCRの進行チェックリスト](tools/workflows/screen_ocr_progress.md) |
 | LLMで統合ログ・タイムスタンプを作る | [ログ整形の手順書](tools/workflows/youtube_log_prompt_v-divの手順書.md) |
 | YouTubeコメント用の目次を作る | [タイムスタンプ作成スキル](tools/skills/youtube_timestamp_comment_skill/README.md)。既存目次の充実度を確認→不足時にコメント再取得→必要な案を生成→ユーザーが手動投稿→公開コメントを再収録。YouTubeとWikiの一覧照合は別作業 |
 | Wiki記事を調査・提案・公開する | 下記「Fandom Wikiの編集」 |

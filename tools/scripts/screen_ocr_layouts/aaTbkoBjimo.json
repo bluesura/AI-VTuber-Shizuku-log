@@ -1,0 +1,7 @@
+{
+  "video_id": "aaTbkoBjimo",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 90000, "end_ms": 7290000, "crop": [30, 556, 848, 126], "mode": "replace", "dark_on_light": true}
+  ]
+}

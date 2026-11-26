@@ -1,0 +1,9 @@
+{
+  "video_id": "ExkPkFVmHVg",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 80000, "end_ms": 6154000, "crop": [32, 553, 848, 132], "mode": "replace", "dark_on_light": true},
+    {"start_ms": 6224500, "end_ms": 7116750, "crop": [32, 553, 848, 132], "mode": "replace", "dark_on_light": true},
+    {"start_ms": 7175250, "end_ms": 9276250, "crop": [32, 553, 848, 132], "mode": "replace", "dark_on_light": true}
+  ]
+}

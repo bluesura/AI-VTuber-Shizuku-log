@@ -174,11 +174,17 @@ def dark_text_boxes(gray):
     rows = np.flatnonzero(np.count_nonzero(ink, axis=1) >= 4)
     height, width = gray.shape
     for group in np.split(rows, np.flatnonzero(np.diff(rows) > 4) + 1):
-        if len(group) < 5:
+        # 枠の端で切れた数ピクセルの帯は、縦横比が極端になり認識できないため除く。
+        if len(group) < 12:
             continue
         top, bottom = int(group[0]), int(group[-1]) + 1
         cols = np.flatnonzero(np.any(ink[top:bottom], axis=0))
-        yield max(0, int(cols[0]) - 6), max(0, top - 3), min(width, int(cols[-1]) + 7), min(height, bottom + 3)
+        if not len(cols):
+            continue
+        left, right = max(0, int(cols[0]) - 6), min(width, int(cols[-1]) + 7)
+        if right - left < 12:
+            continue
+        yield left, max(0, top - 3), right, min(height, bottom + 3)
 
 
 def recognize(engine, frame, gray, dark_on_light=False):
