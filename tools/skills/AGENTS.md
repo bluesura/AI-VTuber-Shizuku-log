@@ -4,7 +4,7 @@
 
 ## 最初に読むもの
 
-[スキル一覧](README.md) から作業対象を選び、そのフォルダ直下の `SKILL.md` と `README.md` を読みます。Wiki編集では、対象ページの手順と [Wiki編集スキル固有の指示](shizuku-wiki/AGENTS.md) も確認します。
+[スキル一覧](README.md) から作業対象を選び、そのフォルダ直下の `SKILL.md` と `README.md` を読みます。Wiki編集では、対象ページの手順も確認します。
 
 - `shizuku-wiki/` はFandom Wikiの調査・提案・反映を担当します。依頼文の例は [プロンプトパターン集](shizuku-wiki/PROMPT_PATTERNS.md) にあります。
 - `video-duration-collector/` は動画URLから再生時間を取得する独立したスキルです。CLIと同梱ファイルの一覧は [README](video-duration-collector/README.md) と [manifest.txt](video-duration-collector/manifest.txt) を参照します。

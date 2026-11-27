@@ -125,11 +125,13 @@ def main():
     months, authors, flags, cross = {}, Counter(), Counter(), 0
     for p in sorted((DATA / "normalized" / "x").glob("*.jsonl")):
         recs = jsonl_read(p)
+        if not recs:
+            continue
         months[p.stem] = len(recs)
         for r in recs:
             authors[r.get("author", "?")] += 1
             if r.get("date_utc") and r["date_utc"] != r["date_jst"]: cross += 1
-            flags.update(set(r.get("quality_flags", "").split("|")) - {""})
+            flags.update(set(r.get("quality_flags", "").replace("｜", "|").split("|")) - {""})
     total = sum(months.values())
     if total:
         add("INFO", "D01", f"UTC→JSTで日付が変わったポスト: {cross}/{total}件 ({100*cross//total}%) — s1で変換済み → §1")

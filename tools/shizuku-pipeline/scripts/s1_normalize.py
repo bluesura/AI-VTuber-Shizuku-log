@@ -14,6 +14,7 @@
 import argparse, csv, io, json, re, statistics, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
+from collections import Counter
 from shizulib import *
 
 def median_nonzero(vals):
@@ -139,6 +140,7 @@ X_TEXT_COLUMNS = (
     "reply_to_post_id", "reply_to_author", "media_urls", "snapshot_date", "metrics_date",
     "source_method", "quality_flags",
 )
+X_TYPE_ALIASES = {"POST": "CONTEXT_TWEET", "QUOTE": "QUOTE_RETWEET", "REPLY_QUOTE": "REPLY"}
 X_METRIC_COLUMNS = ("likes", "reposts", "replies", "views")
 X_REQUIRED_COLUMNS = {"post_id", "date_utc", *X_TEXT_COLUMNS, *X_METRIC_COLUMNS}
 
@@ -180,6 +182,7 @@ def read_x_posts(path, *, label=None):
             "date_jst": date_jst, "time_jst": time_jst, "date_utc": date_utc,
         }
         record.update({key: col(key) for key in X_TEXT_COLUMNS})
+        record["type"] = X_TYPE_ALIASES.get(record["type"], record["type"])
         if not current:
             record["quote_post_id"] = x_status_id(col("引用URL"))
         for key in X_METRIC_COLUMNS:
@@ -188,7 +191,7 @@ def read_x_posts(path, *, label=None):
         yield current, record
 
 
-def process_x():
+def process_x(*, dry_run=False, allow_removal=()):
     rows_by_id = {}
     current_ids = set()
     x_root = DATA / "raw" / "x"
@@ -205,9 +208,23 @@ def process_x():
         if rec["type"] == "RETWEET":
             continue
         months.setdefault(rec["date_jst"][:7], []).append(rec)
+    out = DATA / "normalized" / "x"
+    before = Counter()
+    for path in out.glob("*.jsonl"):
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
+            if line.strip():
+                before[str(json.loads(line)["post_id"])] += 1
+    after = Counter(r["post_id"] for records in months.values() for r in records)
+    missing = (before - after).keys() - set(allow_removal)
+    if missing:
+        raise ValueError(f"X再構築で既存IDが欠落: {', '.join(sorted(missing))}")
+    for path in out.glob("*.jsonl"):
+        if path.stem not in months and not dry_run:
+            jsonl_write(path, [])
     for m, recs in sorted(months.items()):
         recs.sort(key=lambda r: (r["date_jst"], r["time_jst"]))
-        jsonl_write(DATA / "normalized" / "x" / f"{m}.jsonl", recs)
+        if not dry_run:
+            jsonl_write(out / f"{m}.jsonl", recs)
     if months:
         print("  X月別: " + " / ".join(f"{m}:{len(v)}件" for m, v in sorted(months.items())))
 
@@ -217,9 +234,14 @@ def main():
     mode.add_argument("--all", action="store_true")
     mode.add_argument("--stream")
     mode.add_argument("--x", action="store_true", help="配信や処理状態に触れずXログだけを正規化")
+    ap.add_argument("--dry-run", action="store_true", help="--x の出力候補と欠落を確認する")
+    ap.add_argument("--allow-removal", action="append", default=[], metavar="POST_ID",
+                    help="確認済みの欠落IDを個別に許可する（--x 専用）")
     a = ap.parse_args()
+    if not a.x and (a.dry_run or a.allow_removal):
+        ap.error("--dry-run と --allow-removal は --x と併用してください。")
     if a.x:
-        process_x()
+        process_x(dry_run=a.dry_run, allow_removal=a.allow_removal)
         return
     fixes, fams = load_fixes(), load_lexicon()
     manifest = load_state("manifest.json", {})
@@ -243,4 +265,7 @@ def main():
     print("\n次: python scripts/s2_pack.py --stream <vid>  （抽出パック生成）")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError, csv.Error, KeyError) as exc:
+        raise SystemExit(str(exc))

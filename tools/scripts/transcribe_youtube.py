@@ -265,6 +265,22 @@ def render_part(result: dict, index: int, start: float, end: float, *, allow_emp
     return "\n".join(lines) + "\n"
 
 
+def record_cleanup_receipt(run_dir: Path, output: Path, video_id: str) -> None:
+    """追加の音声確認が終わった後に再取得可能な素材を選別するための記録。"""
+    from file_state import atomic_write
+
+    media = [p.name for p in run_dir.glob("source.*")
+             if p.is_file() and p.suffix.lower() in {".mkv", ".mp4", ".webm", ".mov", ".flv", ".3gp"}]
+    receipt = {
+        "video_id": video_id,
+        "output": output.resolve().relative_to(REPO_ROOT.resolve()).as_posix(),
+        "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+        "files": sorted(media + ["audio.wav"]),
+    }
+    atomic_write(run_dir / "cleanup-receipt.json", json.dumps(receipt, ensure_ascii=False) + "\n")
+
+
+
 def remove_workdir(run_dir: Path, staging_parent: Path) -> None:
     root = staging_parent.resolve()
     target = run_dir.resolve()
@@ -330,8 +346,15 @@ def transcribe_video(
     else:
         run_dir = Path(tempfile.mkdtemp(prefix=f"run_{video_id}_", dir=staging_parent))
         (run_dir / "request.json").write_text(json.dumps({"video_id": video_id, "url": url}), encoding="utf-8")
+    from contextlib import ExitStack
+    from file_state import file_lock
+
+    locks = ExitStack()
+    if resume_workdir:
+        locks.enter_context(file_lock(staging_parent / f".{run_dir.name}.lock"))
     print(f"  作業フォルダ: {run_dir}", flush=True)
     try:
+        (run_dir / "cleanup-receipt.json").unlink(missing_ok=True)
         if previous_digest is not None:
             backup = run_dir / "previous.transcribe.txt"
             if backup.exists():
@@ -401,9 +424,16 @@ def transcribe_video(
             candidate.unlink(missing_ok=True)
         if output.read_text(encoding="utf-8") != combined:
             raise RuntimeError("保存した文字起こしの再読込検証に失敗しました。")
+        if keep_staging:
+            try:
+                record_cleanup_receipt(run_dir, output, video_id)
+            except (OSError, ValueError) as exc:
+                print(f"  整理候補の記録を作成できません: {exc}", flush=True)
     except BaseException:
         print(f"  [失敗] 再確認用に中間ファイルを保持しました: {run_dir}", flush=True)
         raise
+    finally:
+        locks.close()
     if keep_staging:
         print(f"  ✅ 文字起こしを保存し、内容確認用に中間ファイルを保持しました: {output}", flush=True)
     else:

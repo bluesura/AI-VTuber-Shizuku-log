@@ -92,6 +92,21 @@ class XPipelineTests(unittest.TestCase):
         self.assertEqual((legacy["likes"], legacy["views"], legacy["quote_post_id"]), (1200, 0, "121"))
         self.assertFalse((self.data / "state").exists())
 
+    def test_rebuild_dry_run_aliases_and_missing_month(self):
+        path = self.raw / "current.tsv"
+        write_tsv(path, NEW_HEADER, [dict(self.current, type="POST")])
+        self.assertEqual(next(s1_normalize.read_x_posts(path))[1]["type"], "CONTEXT_TWEET")
+        self.normalize()
+        month = self.data / "normalized/x/2023-02.jsonl"
+        snapshot = month.read_bytes()
+        write_tsv(path, NEW_HEADER, [dict(self.current, type="QUOTE", post_id="456")])
+        self.assertEqual(next(s1_normalize.read_x_posts(path))[1]["type"], "QUOTE_RETWEET")
+        with patch.object(s1_normalize, "DATA", self.data):
+            with self.assertRaisesRegex(ValueError, "123"):
+                s1_normalize.process_x(dry_run=True)
+            s1_normalize.process_x(dry_run=True, allow_removal=["123"])
+        self.assertEqual(month.read_bytes(), snapshot)
+
     def test_doctor_retains_counts_for_both_headers_and_empty_period(self):
         write_tsv(self.raw / "current.txt", NEW_HEADER, [self.current])
         write_tsv(self.raw / "legacy.tsv", LEGACY_HEADER, [self.legacy])

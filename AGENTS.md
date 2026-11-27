@@ -20,22 +20,23 @@ AI VTuber「しずく」の配信・動画・SNSの発言を保存し、検索�
 
 - `logs/youtube/<年>/<日付_タイトル>/`: YouTubeの動画情報、字幕、ライブチャット、コメント。アーカイブの一次資料です。
 - `logs/twitter(x)/<ハンドル>/`: Xの収集ログ（年・月別TSV）。[収集・統合手順](tools/workflows/x_collection_workflow.md)
-- `persona/`: ログから導いた人格・安定特性・エピソード・観測・出力資料と生成用プロンプト。
+- `tools/persona/`: ログから導いた人格・安定特性・エピソード・観測・出力資料と生成用プロンプト。
 - `tools/scripts/`: 収集、匿名化、字幕変換、伏せ字化、画像処理用の単体スクリプト。
 - `tools/prompts/`: ログ整形・分析・抽出用プロンプト。
 - `tools/workflows/`: 手動またはLLM併用ワークフローの手順書。
 - `tools/skills/` はAIスキルと補助スクリプトの置き場です。[スキル一覧](tools/skills/README.md)
-- `tools/shizuku-pipeline/`: ログからWiki候補を作る、独立した半自動パイプライン。
+- `tools/shizuku-pipeline/` はしずくの全量分析とWiki候補生成に使う独立したパイプラインです。Python 3.9以上の標準ライブラリで動かし、配信・チャットの機械的な間引きや非LLMランキングを行いません。Wiki掲載の除外設定はWiki側だけで使います。
+- `tools/persona/` の資料はしずくの個別分析用です。横断検証は確認済みの対照表を読み取り専用で扱います。出典・文面・欠落・キャッシュの検証CLIは [tools/scripts/verify](tools/scripts/verify/README.md) にあります。
 
-`persona/00_persona/bserver_profile.md` はファイル名だけが `observer_profile.md` の先頭文字欠落になっている既存ファイルです。参照元をすべて更新する作業でない限り、ついでに改名しないでください。
+`tools/persona/00_persona/bserver_profile.md` はファイル名だけが `observer_profile.md` の先頭文字欠落になっている既存ファイルです。参照元をすべて更新する作業でない限り、ついでに改名しないでください。
 
 ## 根拠と品質の原則
 
-1. 一次資料を優先します。事実確認では `*.info.txt`、字幕、チャット、コメント、Xログへ戻り、AI生成の要約や `*.compiled.md` だけを根拠にしません。
+1. 事実確認では、まずローカルに保存した本人発言、開発・運営の告知などを確認します。次に、主張を直接裏付ける外部の公式発表や一次取材を出典リンク付きで確認します。いずれでも確認できない場合は「未収録」または「出典不明」と記録します。ローカルの確認では `*.info.txt`、字幕、チャット、コメント、Xログへ戻り、AI生成の要約や `*.compiled.md` だけを根拠にしません。
 2. ASR、OCR、AI生成物には誤認識や幻覚がある前提で扱います。聞き取れない語句、日付、固有名詞、話者を推測で確定しません。
 3. 引用・名言・出来事を追加するときは、可能な範囲で動画ID、日付、タイムスタンプ、参照ファイルを追跡可能にします。
 4. しずく本人の発言、視聴者コメント、分析者の解釈を混同しません。解釈や仮説にはその旨を明記します。
-5. `persona/` の資料を更新するときは、既存の確定情報と `[要確認]` を区別し、観測時点を残します。
+5. `tools/persona/` の資料を更新するときは、既存の確定情報と `[要確認]` を区別し、観測時点を残します。
 
 GitHubとFandom Wikiの役割、収録範囲、取得・加工履歴の記録方法は [ログの保存と検証の方針](docs/archive-policy.md) に従います。
 
@@ -73,7 +74,7 @@ GitHubとFandom Wikiの役割、収録範囲、取得・加工履歴の記録方
 - ログ分析: `tools/prompts/shizuku_analysis/analysis_workflow_guide.md`
 - YouTubeコメント用タイムスタンプ: [スキルのREADME](tools/skills/youtube_timestamp_comment_skill/README.md)。保存済みコメントの目次の充実度を確認し、不足・未収録なら `python tools/scripts/check_youtube_timestamps.py <動画ID> --refresh` で再取得して再判定します。補助ツールの時刻検出だけで充実度を確定しません。必要な案をチャットに提示し、投稿はユーザーが手動で行います。投稿後は再取得して今回の本文を確認し、公開未確認なら再生成・再投稿を促さず保留します。生成案を一次ログへ混ぜません。YouTubeとFandom「動画・配信」の照合・Wiki更新は別スキルの作業であり、このスキルの必須手順にしません。
 - Wiki候補生成: `tools/shizuku-pipeline/MANUAL.md`
-- ペルソナ更新: `persona/99_prompts/analysis_prompt.md`
+- ペルソナ更新: `tools/persona/99_prompts/analysis_prompt.md`
 
 ## Fandom Wiki編集スキル
 
@@ -81,7 +82,7 @@ Shizuku Fandom（<https://shizuku.fandom.com/>）向けの `shizuku-wiki` スキ
 
 参照順は次のとおりです。
 
-1. [スキル領域の共通指示](tools/skills/AGENTS.md) と [Wiki編集スキル固有の指示](tools/skills/shizuku-wiki/AGENTS.md) で、適用範囲と補助ツールの扱いを確認する。
+1. [スキル領域の共通指示](tools/skills/AGENTS.md) で、適用範囲と補助ツールの扱いを確認する。
 2. [スキル本体（SKILL.md）](tools/skills/shizuku-wiki/SKILL.md)：振り分け表、ページ間の連動、日付・出典・差分の共通規則。
 3. 同スキルの `references/page-*.md` にある対象ページの手順と [文体ガイド](tools/skills/shizuku-wiki/references/tone-style-guide.md)。英語版を扱う場合は `references/translation-guide.md` も参照します。
 4. [スキルのREADME](tools/skills/shizuku-wiki/README.md)：導入、補助スクリプト、BotPasswordの設定・確認手順。
@@ -185,6 +186,10 @@ python tools/scripts/transcribe_youtube.py <動画ID> --profile japanese --resum
 - 失敗・中断時は中間データを保持し、動画ID、失敗区間、再開用フォルダを報告します。他の実行フォルダ、既存ログ、モデルキャッシュは削除しません。
 - 作業開始時と完了時に、作業ルート、実際の中間フォルダ、最終ファイルの絶対パスと、中間データを削除したか保持したかを明示します。モデルを取得した場合はキャッシュの保存場所も報告します。これらのローカルパスを公開用ログへ混入させません。
 
+## キャッシュの整理
+
+`clean_cache.py` は既定で候補のパス・サイズ・理由を表示します。`--execute` は、ユーザーがその削除対象を確認して承認した場合だけ実行します。他の作業に伴う自動実行は行いません。実行中・失敗時の中間データ、Wikiの承認・公開・同期記録、一次ログ、パイプラインのカード・台帳・レビュー・進捗を保護します。既存のログ取得・ASRが成功時に自分の専用フォルダを片付ける手順は各ワークフローに従います。
+
 ## 検証
 
 変更範囲に応じて、ルートから次を実行します。
@@ -195,6 +200,8 @@ python -m compileall -q tools/scripts tools/shizuku-pipeline/scripts tools/skill
 
 # 現在ある単体テスト
 python -m unittest discover -s tools/scripts -p "test_*.py"
+python -m unittest discover -s tools/scripts/verify -p "test_*.py"
+python -m unittest discover -s tools/shizuku-pipeline/scripts -p "test_*.py"
 python -m unittest discover -s tools/skills/shizuku-wiki/scripts -p "test_*.py"
 python -m unittest discover -s tools/skills/video-duration-collector/scripts -p "test_*.py"
 

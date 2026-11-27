@@ -23,11 +23,11 @@ Wikiの編集をLLMに手伝わせると、日付の書き方が毎回違った�
 
 ## インストール
 
-このリポジトリでは `source/shizuku-wiki/SKILL.md` を直接読んで使えます。グローバルにインストール済みとは仮定しません。
+このリポジトリでは `SKILL.md` を直接読んで使えます。グローバルにインストール済みとは仮定しません。
 
 別の環境へ持ち込む場合は `shizuku-wiki-v3.1.1.skill`（v3.1.1）を利用します。ZIPとして展開し、展開した `shizuku-wiki/` を利用環境の手順に従って導入します。
 
-リポジトリでの編集用の正本は `source/shizuku-wiki/` です。更新時はREADMEの2コピーを揃え、新しい版の配布物を生成します。Wiki本文や一時的な実行スクリプトを配布物へ入れません。
+リポジトリでの編集用の正本は `tools/skills/shizuku-wiki/` です。Wiki本文や一時的な実行スクリプトを配布物へ入れません。
 
 ---
 
@@ -63,7 +63,7 @@ yomiyasu 3.1.0をスキルに同梱し、Wikiの地の文を必要な箇所だ�
 
 ### Fandom Wikiの認証・API設定
 
-以下のコマンド例はGitHubリポジトリのルートで実行します。スキルを単独展開して使う場合は、スキルフォルダで `tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/` を `scripts/` と読み替えてください。確認案の `outputs/shizuku-wiki/` は実行時のカレントディレクトリが基準です。
+以下のコマンド例はGitHubリポジトリのルートで実行します。スキルを単独展開して使う場合は、スキルフォルダで `tools/skills/shizuku-wiki/scripts/` を `scripts/` と読み替えてください。確認案の `outputs/shizuku-wiki/` はリポジトリのルートが基準です。単独展開時は実行時のカレントディレクトリが基準です。
 
 #### 1. BotPasswordを作成・管理する
 
@@ -191,7 +191,7 @@ try {
         }
         [Environment]::SetEnvironmentVariable($shizukuBotName, $shizukuBotValue, "Process")
     }
-    python -X utf8 tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
+    python -X utf8 tools/skills/shizuku-wiki/scripts/update_videos_streams.py auth-check
     if ($LASTEXITCODE -ne 0) { throw "Fandomの認証確認に失敗しました。" }
     # 承認後の反映なども、このtry内で実行する。
 }
@@ -211,20 +211,20 @@ finally {
 
 ```powershell
 # 認証と対象ページの読み取りだけを確認（編集しない）
-python -X utf8 tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py auth-check
+python -X utf8 tools/skills/shizuku-wiki/scripts/update_videos_streams.py auth-check
 ```
 
 確認と反映は意図的に別コマンドです。
 
 ```powershell
 # ソース取得・YouTube照合・差分案の作成（Wikiは変更しない）
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py check
+python tools/skills/shizuku-wiki/scripts/update_videos_streams.py check
 
 # 明示的に必要な場合だけショートも含める
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py check --include-shorts
+python tools/skills/shizuku-wiki/scripts/update_videos_streams.py check --include-shorts
 
 # 表示済みの差分をユーザーが承認した後、出力された確認案を指定して実行
-python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_streams.py apply --plan "outputs/shizuku-wiki/video-streams-r486-xxxxxxxxxxxx.json" --yes
+python tools/skills/shizuku-wiki/scripts/update_videos_streams.py apply --plan "outputs/shizuku-wiki/video-streams-r486-xxxxxxxxxxxx.json" --yes
 ```
 
 確認案は既定で `outputs/shizuku-wiki/` に基準リビジョンと差分ハッシュを含む名前で保存されます。このファイルはGit管理外です。反映前にはページのリビジョンと本文ハッシュを再検証し、確認後に別の編集が入っていた場合は何も変更せず終了します。
@@ -241,6 +241,22 @@ python tools/skills/shizuku-wiki/source/shizuku-wiki/scripts/update_videos_strea
 参照：[MediaWikiのBotPassword管理・再発行](https://www.mediawiki.org/wiki/Manual:Bot_passwords/en)、[Microsoftのユーザー環境変数の保存・継承仕様](https://learn.microsoft.com/en-us/dotnet/api/system.environment.setenvironmentvariable)。
 
 ---
+
+### 除外・定期表示監査・日英同期
+
+`config/excluded_streams.tsv` に動画IDと理由を登録すると、動画一覧の新規候補から除外される。既掲載行の削除や年表への反映は、別途レビューした差分だけを扱う。連続3回失敗したページは、保存状態と失敗原因を確認した後に `update_videos_streams.py unlock --yes` で解除する。
+
+公開済みページを定期点検するには、`audit_wiki.py <正式ページ名> --require-category <カテゴリ名>` を実行する。英語版の `English` と、ページ別の日本語カテゴリを必要に応じて繰り返し指定する。[Fandom APIの運用メモ](references/fandom-quirks.md)
+
+英語版は同じWiki内の正式タイトルに同期する。以下はリポジトリのルートから実行する。履歴を確認済みの初回は `check` と `draft` に `--bootstrap` を付ける。
+
+```powershell
+python tools/skills/shizuku-wiki/scripts/sync_en_wiki.py check しずく
+python tools/skills/shizuku-wiki/scripts/sync_en_wiki.py draft しずく --translation <英語全文.txt> --plan outputs/shizuku-wiki/shizuku-en.json
+python tools/skills/shizuku-wiki/scripts/sync_en_wiki.py apply --plan outputs/shizuku-wiki/shizuku-en.json --yes
+```
+
+`check` は日本語版の差分と関連対訳を表示する。`draft` が表示する英語版差分への承認後に `apply --yes` を実行する。本文末尾に日本語版のリビジョンを記録し、英語版の保存リビジョンとハッシュは `outputs/shizuku-wiki/sync-*.sqlite3` に保持する。英語版の同期記録が現在版と違う場合は、版履歴を確認して人間が差分を採否する。同期・ロック記録は整理対象から外す。
 
 ## 構成
 

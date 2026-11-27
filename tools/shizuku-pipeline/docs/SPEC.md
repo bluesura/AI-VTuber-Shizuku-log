@@ -139,6 +139,8 @@ repair_cards.py (引数なし=ドライラン) | --apply           # 既存カ�
 - Xログ: [新形式の20列TSV](../../../docs/x-log-spec.md) と旧形式の `URL` / `日付` を含むTSVを受け付ける。「なし」のみのファイルは空記録として扱う。S0は `logs/twitter(x)/<ハンドル>/` から `data/raw/x/<ハンドル>/` に相対パスを保ってコピーする。S1とdoctorは `data/raw/x/` 以下を再帰的に読み、従来の直下配置も受け付ける。
 - S1の月別JSONLは既存のUTC日付（`date_utc` は `YYYY-MM-DD`）、JST日付・時刻、本文、数値または `null` の反応数を維持する。新形式は `post_id` から `https://x.com/i/status/{post_id}` を生成し、URL・引用・返信・メディア・取得日・取得経路・品質フラグの列をそのまま保持する。旧形式はURLを保持し、対応する列がある値を引き継ぐ。
 - 新旧で同じ投稿IDがあれば新形式を優先する。`RETWEET` は月別JSONLと後続の発言抽出から除外する。`--x` でXだけを再構築できる。
+- 旧型名の POST、QUOTE、REPLY_QUOTE は、それぞれ CONTEXT_TWEET、QUOTE_RETWEET、REPLY に変換する。返信と引用を兼ねる場合も関係列は保持する。
+- 既存月別JSONLの投稿IDを候補と比較し、欠落があれば出力前に停止する。--x --dry-run で候補を確認できる。人間確認済みの欠落は --x --allow-removal POST_ID で個別に指定する。
 - S2のX抽出パックは月別JSONLの `author` と `quote_author` を含む。取込時に `post_id` で正規化済み投稿を引き、`author` が `Shizuku_AItuber` と確認できる投稿だけをXの `quote_candidate` として受理する。他アカウントの資料は `event` や `capability` などに使える。
 
 ### Xログ移行用の再構築（Phase 2）

@@ -25,12 +25,12 @@
 | `post_id` | 文字列（数値ID） | ○ | XのステータスID。URLはパイプライン・Wiki出力時に `https://x.com/i/status/{post_id}` として生成する（ハンドル名を含めず、改名耐性・匿名性を確保） |
 | `date_utc` | ISO8601 (`YYYY-MM-DDTHH:MM:SS.000Z`) | ○ | 投稿日時（UTC）。年表・Wiki反映時はパイプライン側でJST（+9時間）へ変換する |
 | `author` | 文字列 | ○ | 投稿者のハンドル（例：`Shizuku_AItuber`, `cumulo_autumn`） |
-| `type` | 列挙値 | ○ | `CONTEXT_TWEET`（通常投稿） / `REPLY`（返信） / `QUOTE_RETWEET`（引用RT） / `RETWEET`（単純RT。※原則除外対象、§5参照） |
+| `type` | 列挙値 | ○ | `CONTEXT_TWEET`（通常投稿） / `REPLY`（返信。引用を兼ねる場合は引用列も保持） / `QUOTE_RETWEET`（引用RT） / `RETWEET`（単純RT。※原則除外対象、§5参照） |
 | `text` | 文字列 | | 投稿本文。FxTwitter等で復元した標準絵文字・展開済みURLを保持する。演出上の意図的な文字化け（例：2023-05-24 `1661325152653815808`）は原文のまま残す |
 | `extracted_urls` | 空白区切りURL | | 本文・`facets` から抽出した外部URL。`t.co` は展開後の正規URLを格納する |
 | `quote_post_id` | 文字列（数値ID） | | 引用元（`QUOTE_RETWEET`）のステータスID。従来の `引用URL` 列を統合・ID化 |
 | `quote_author` | 文字列 | | 引用元の投稿者。ホワイトリスト対象は実ハンドル、一般視聴者は `User_XXXXXXXX`（§3参照） |
-| `quote_text` | 文字列 | | 引用元の本文。一般視聴者の引用本文を載せる場合は匿名化（または必要最小限に留める） |
+| `quote_text` | 文字列 | | 引用元の本文。一般視聴者の引用本文は保存しない（§3参照） |
 | `reply_to_post_id` | 文字列（数値ID） | | 返信先（`REPLY`）の親ステータスID。確認用導線（`https://x.com/i/status/{reply_to_post_id}`）として保持する（§3参照） |
 | `reply_to_author` | 文字列 | | 返信先の投稿者。ホワイトリスト対象は実ハンドル、一般視聴者は `User_XXXXXXXX` |
 | `media_urls` | 空白区切りURL | | 添付画像・動画サムネURL。`pbs.twimg.com` の画像URLは原則 `name=orig`（または `large`）へ正規化する |
@@ -68,9 +68,10 @@
 - `fx_status`: FxTwitter API（`status` エンドポイント）による取得
 - `fx_thread`: FxTwitter API（`thread` / `conversation` エンドポイント）による補完
 - `web_dom+fx`: `web_dom` で取得した行を、保存済みまたは再取得した FxTwitter 応答で本文・引用・URL補完したもの
-- `web_dom+fx+fx_thread`: 上記に加え、`thread` または `conversation` で返信先を補完したもの
+- `fxtwitter`: 既存TSVに残る旧ラベル。status・thread等の区別が確認できないため履歴として保持する。
+- `web_dom+fx+fx_thread`: このうち web_dom+fx に加え、`thread` または `conversation` で返信先を補完したもの
 
-### `quality_flags`（`｜` 区切り・正常時は空欄）
+### `quality_flags`（ASCIIの `|` 区切り・正常時は空欄）
 - `no_emoji`: DOM抽出時に標準絵文字（`img[alt]`）が欠落している可能性
 - `trunc_text`: 本文が文字数制限等で途中切れ（末尾 `…` 等）
 - `trunc_quote`: 引用本文が120文字等で途中切れ

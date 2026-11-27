@@ -10,22 +10,28 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import csv
 import dataclasses
 import datetime as dt
 import difflib
-import hashlib
-import http.cookiejar
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any, Iterable, Sequence
+
+
+
+# ファイルパスから直接ロードする呼び出し元にも対応する。
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from audit_wiki import report_saved_revision
+from wiki_client import (
+    API_URL, DEFAULT_PLAN_DIR, MediaWikiClient, PageSnapshot, UpdateError,
+    _json_object, apply_attempt, read_credentials, sanitize_field, sha256_text,
+)
 
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -34,7 +40,6 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-API_URL = "https://shizuku.fandom.com/api.php"
 PAGE_TITLE = "動画・配信"
 PAGE_URL = "https://shizuku.fandom.com/wiki/%E5%8B%95%E7%94%BB%E3%83%BB%E9%85%8D%E4%BF%A1"
 CORE_CHANNEL_TABS = (
@@ -42,10 +47,8 @@ CORE_CHANNEL_TABS = (
     ("video", "https://www.youtube.com/@aivtuber_shizuku/videos"),
 )
 SHORTS_TAB = ("short", "https://www.youtube.com/@aivtuber_shizuku/shorts")
-USERNAME_ENV = "SHIZUKU_FANDOM_BOT_USERNAME"
-PASSWORD_ENV = "SHIZUKU_FANDOM_BOT_PASSWORD"
 PLAN_SCHEMA = 1
-DEFAULT_PLAN_DIR = Path("outputs/shizuku-wiki")
+EXCLUDED_STREAMS = Path(__file__).resolve().parents[1] / "config" / "excluded_streams.tsv"
 VIDEO_ID_PATTERN = r"[A-Za-z0-9_-]{11}"
 VIDEO_ID_RE = re.compile(VIDEO_ID_PATTERN)
 YOUTUBE_URL_RE = re.compile(
@@ -66,19 +69,6 @@ TABLE_HEADER = """{| class="wikitable sortable"
 ! 時間
 ! タイトル
 """
-
-
-class UpdateError(RuntimeError):
-    """安全に処理を継続できない場合のエラー。"""
-
-
-@dataclasses.dataclass(frozen=True)
-class PageSnapshot:
-    title: str
-    revid: int
-    timestamp: str
-    server_timestamp: str
-    text: str
 
 
 @dataclasses.dataclass(frozen=True)
@@ -115,7 +105,7 @@ class VideoEntry:
             f"| {self.published_jst}\n"
             f"| {self.tag}\n"
             f"| {self.duration}\n"
-            f"| [{self.url} {self.title}]\n"
+            f"| [{self.url} {sanitize_field(self.title)}]\n"
         )
 
 
@@ -134,166 +124,6 @@ class UpdateResult:
     total_after: str
     breakdown_before: str
     breakdown_after: str
-
-
-def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _json_object(value: Any, context: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise UpdateError(f"{context}の応答形式が不正です。")
-    return value
-
-
-class MediaWikiClient:
-    def __init__(self, api_url: str = API_URL) -> None:
-        self.api_url = api_url
-        cookie_jar = http.cookiejar.CookieJar()
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(cookie_jar)
-        )
-        self.headers = {
-            "User-Agent": (
-                "ShizukuWikiUpdater/1.0 "
-                "(https://github.com/Bluesura/AI-VTuber-Shizuku-log; MediaWiki API)"
-            ),
-            "Accept": "application/json",
-        }
-
-    def request(self, params: dict[str, Any], *, post: bool = False) -> dict[str, Any]:
-        common = {"format": "json", "formatversion": "2", "errorformat": "plaintext"}
-        encoded = urllib.parse.urlencode({**common, **params}).encode("utf-8")
-        if post:
-            request = urllib.request.Request(
-                self.api_url, data=encoded, headers=self.headers, method="POST"
-            )
-        else:
-            request = urllib.request.Request(
-                f"{self.api_url}?{encoded.decode('ascii')}", headers=self.headers
-            )
-        try:
-            with self.opener.open(request, timeout=45) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise UpdateError(f"Fandom APIがHTTP {exc.code}を返しました。") from exc
-        except urllib.error.URLError as exc:
-            raise UpdateError(f"Fandom APIへ接続できませんでした: {exc.reason}") from exc
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise UpdateError("Fandom APIの応答をJSONとして解析できませんでした。") from exc
-
-        result = _json_object(payload, "Fandom API")
-        if "error" in result:
-            error = _json_object(result["error"], "Fandom APIエラー")
-            code = str(error.get("code") or "unknown")
-            message = str(error.get("text") or error.get("info") or "詳細なし")
-            raise UpdateError(f"Fandom APIエラー ({code}): {message}")
-        return result
-
-    def _token(self, token_type: str) -> str:
-        payload = self.request(
-            {"action": "query", "meta": "tokens", "type": token_type}
-        )
-        query = _json_object(payload.get("query"), "トークン")
-        tokens = _json_object(query.get("tokens"), "トークン")
-        key = f"{token_type}token"
-        token = str(tokens.get(key) or "")
-        if not token:
-            raise UpdateError(f"{token_type}トークンを取得できませんでした。")
-        return token
-
-    def login(self, username: str, password: str) -> None:
-        token = self._token("login")
-        payload = self.request(
-            {
-                "action": "login",
-                "lgname": username,
-                "lgpassword": password,
-                "lgtoken": token,
-            },
-            post=True,
-        )
-        login = _json_object(payload.get("login"), "ログイン")
-        if login.get("result") != "Success":
-            reason = str(login.get("reason") or login.get("result") or "不明")
-            raise UpdateError(f"Bot Passwordでログインできませんでした: {reason}")
-
-    def fetch_page(self) -> PageSnapshot:
-        payload = self.request(
-            {
-                "action": "query",
-                "prop": "revisions",
-                "titles": PAGE_TITLE,
-                "rvprop": "ids|timestamp|content",
-                "rvslots": "main",
-                "curtimestamp": "1",
-            }
-        )
-        query = _json_object(payload.get("query"), "ページ取得")
-        pages = query.get("pages")
-        if not isinstance(pages, list) or len(pages) != 1:
-            raise UpdateError("対象ページを一意に取得できませんでした。")
-        page = _json_object(pages[0], "ページ")
-        if page.get("missing") is True:
-            raise UpdateError(f"対象ページ「{PAGE_TITLE}」が存在しません。")
-        revisions = page.get("revisions")
-        if not isinstance(revisions, list) or not revisions:
-            raise UpdateError("対象ページのリビジョンを取得できませんでした。")
-        revision = _json_object(revisions[0], "リビジョン")
-        slots = _json_object(revision.get("slots"), "リビジョンスロット")
-        main = _json_object(slots.get("main"), "メインスロット")
-        text = main.get("content", main.get("*"))
-        if not isinstance(text, str):
-            raise UpdateError("対象ページのwikiソースを取得できませんでした。")
-        return PageSnapshot(
-            title=str(page.get("title") or ""),
-            revid=int(revision.get("revid") or 0),
-            timestamp=str(revision.get("timestamp") or ""),
-            server_timestamp=str(payload.get("curtimestamp") or ""),
-            text=text,
-        )
-
-    def edit_page(self, snapshot: PageSnapshot, text: str, summary: str) -> int:
-        token = self._token("csrf")
-        payload = self.request(
-            {
-                "action": "edit",
-                "title": PAGE_TITLE,
-                "text": text,
-                "summary": summary,
-                "token": token,
-                "baserevid": str(snapshot.revid),
-                "basetimestamp": snapshot.timestamp,
-                "starttimestamp": snapshot.server_timestamp,
-                "assert": "user",
-            },
-            post=True,
-        )
-        edit = _json_object(payload.get("edit"), "編集")
-        if edit.get("result") != "Success":
-            raise UpdateError(f"Wikiの編集に失敗しました: {edit.get('result', '不明')}")
-        new_revid = int(edit.get("newrevid") or 0)
-        if not new_revid:
-            raise UpdateError("編集成功応答に新しいリビジョンIDがありません。")
-        return new_revid
-
-
-def read_credentials(*, required: bool) -> tuple[str, str] | None:
-    username = os.environ.get(USERNAME_ENV, "").strip()
-    password = os.environ.get(PASSWORD_ENV, "")
-    if bool(username) != bool(password):
-        raise UpdateError(
-            f"{USERNAME_ENV} と {PASSWORD_ENV} は両方設定してください。"
-        )
-    if not username:
-        if required:
-            raise UpdateError(
-                "反映にはBot Passwordが必要です。"
-                f"{USERNAME_ENV} と {PASSWORD_ENV} をユーザー環境変数に設定し、"
-                "Codexを再起動してください。"
-            )
-        return None
-    return username, password
 
 
 def extract_video_ids(text: str) -> set[str]:
@@ -635,8 +465,6 @@ def entry_from_metadata(candidate: Candidate, metadata: dict[str, Any]) -> Video
     title = str(metadata.get("title") or "").strip()
     if not title:
         raise UpdateError("正式タイトルを取得できませんでした。")
-    if "\n" in title or "]" in title:
-        raise UpdateError("タイトルを安全なMediaWiki外部リンクとして表現できません。")
     # YouTubeでは過去配信がvideosタブにも現れる場合がある。個別メタデータが
     # was_liveなら、一覧タブより強い根拠としてアーカイブへ振り分ける。
     kind = "stream" if status == "was_live" else candidate.kind
@@ -704,8 +532,12 @@ def _entry_from_dict(value: dict[str, Any]) -> VideoEntry:
         raise UpdateError(f"動画種別が不正です: {entry.kind}")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?", entry.published_jst):
         raise UpdateError(f"公開日時が不正です: {entry.published_jst}")
-    if not entry.title or "\n" in entry.title or "]" in entry.title:
+    if not entry.title.strip():
         raise UpdateError(f"タイトルが不正です: {entry.video_id}")
+    if entry.tag and entry.tag != sanitize_field(entry.tag):
+        raise UpdateError("タグにマークアップが含まれています。")
+    if entry.duration and not re.fullmatch(r"(?:[0-9]+:)?[0-9]+:[0-5][0-9]", entry.duration):
+        raise UpdateError("再生時間が不正です。")
     return entry
 
 
@@ -832,11 +664,26 @@ def validate_plan(plan: dict[str, Any], additions: Sequence[VideoEntry]) -> Upda
     return rebuilt
 
 
+def excluded_streams(path: Path | None = None) -> dict[str, str]:
+    path = path or EXCLUDED_STREAMS
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream, delimiter="\t")
+        if reader.fieldnames != ["video_id", "reason"]:
+            raise UpdateError("Wiki除外リストのヘッダが不正です。")
+        excluded = {}
+        for row in reader:
+            vid, reason = row["video_id"], row["reason"]
+            if not VIDEO_ID_RE.fullmatch(vid or "") or not (reason or "").strip() or vid in excluded or None in row:
+                raise UpdateError(f"Wiki除外リストの不正な行: {reader.line_num}")
+            excluded[vid] = reason
+        return excluded
+
+
 def command_check(args: argparse.Namespace) -> int:
-    client = MediaWikiClient()
+    client = MediaWikiClient(allowed_titles=(PAGE_TITLE,))
     # 公開ページのソース確認には認証を使わない。Bot Passwordを読むのは
     # auth-checkと、ユーザー承認後のapplyだけに限定する。
-    snapshot = client.fetch_page()
+    snapshot = client.fetch_page(PAGE_TITLE)
     if snapshot.title != PAGE_TITLE:
         raise UpdateError(f"取得したページ名が一致しません: {snapshot.title}")
     existing_ids = extract_video_ids(snapshot.text)
@@ -844,7 +691,12 @@ def command_check(args: argparse.Namespace) -> int:
     candidates = collect_candidates(
         command, existing_ids, include_shorts=args.include_shorts
     )
+    excluded = excluded_streams()
+    omitted = [ManualItem(item.video_id, item.kind, excluded[item.video_id])
+               for item in candidates if item.video_id in excluded]
+    candidates = [item for item in candidates if item.video_id not in excluded]
     entries, manual = fetch_entries(command, candidates, args.workers)
+    manual.extend(omitted)
     result = build_update(snapshot.text, entries)
     plan_path = args.plan or (
         DEFAULT_PLAN_DIR
@@ -865,14 +717,31 @@ def command_apply(args: argparse.Namespace) -> int:
         raise UpdateError("反映には、表示済み差分への承認後に --yes が必要です。")
     plan, additions = load_plan(args.plan)
     rebuilt = validate_plan(plan, additions)
+    excluded = set(excluded_streams()).intersection(entry.video_id for entry in additions)
+    if excluded:
+        raise UpdateError(f"確認案に現在の除外IDが含まれます。checkから再作成: {sorted(excluded)}")
     if rebuilt.text == plan["base_text"]:
         raise UpdateError("確認案に反映対象の変更がありません。")
 
+    try:
+        with apply_attempt(PAGE_TITLE):
+            return publish_plan(plan, rebuilt, additions)
+    except (OSError, UpdateError, ValueError):
+        print("基準版に変更がなく、未反映と確認できた場合の再実行:")
+        print(f'python "{Path(__file__)}" apply --plan "{args.plan}" --yes')
+        raise
+
+
+def publish_plan(plan, rebuilt, additions) -> int:
     credentials = read_credentials(required=True)
     assert credentials is not None
-    client = MediaWikiClient()
+    client = MediaWikiClient(allowed_titles=(PAGE_TITLE,))
     client.login(*credentials)
-    current = client.fetch_page()
+    current = client.fetch_page(PAGE_TITLE)
+    if current.text == rebuilt.text:
+        print(f"承認済み本文は保存済みです（リビジョン {current.revid}）。")
+        report_saved_revision(client, PAGE_TITLE, current.revid)
+        return 0
     if current.revid != int(plan.get("base_revid") or 0):
         raise UpdateError(
             f"確認後にWikiが更新されています（確認時 {plan.get('base_revid')} / "
@@ -883,7 +752,7 @@ def command_apply(args: argparse.Namespace) -> int:
 
     summary = f"動画・配信一覧を更新（YouTube公開分{len(additions)}件を追加）"
     new_revid = client.edit_page(current, rebuilt.text, summary)
-    verified = client.fetch_page()
+    verified = client.fetch_page(PAGE_TITLE)
     if verified.revid != new_revid or verified.text != rebuilt.text:
         raise UpdateError(
             f"編集はリビジョン{new_revid}として受理されましたが、反映後検証が一致しません。"
@@ -894,6 +763,7 @@ def command_apply(args: argparse.Namespace) -> int:
     print(f"反映しました: {PAGE_TITLE}（新リビジョン {new_revid}）")
     print(f"確認URL: {PAGE_URL}?oldid={new_revid}")
     print("追加動画ID: " + ", ".join(entry.video_id for entry in additions))
+    report_saved_revision(client, PAGE_TITLE, new_revid)
     return 0
 
 
@@ -901,13 +771,22 @@ def command_auth_check(args: argparse.Namespace) -> int:
     del args
     credentials = read_credentials(required=True)
     assert credentials is not None
-    client = MediaWikiClient()
+    client = MediaWikiClient(allowed_titles=(PAGE_TITLE,))
     client.login(*credentials)
-    snapshot = client.fetch_page()
+    snapshot = client.fetch_page(PAGE_TITLE)
     print(
         f"認証と読み取りに成功しました: {snapshot.title} "
         f"（リビジョン {snapshot.revid}、編集はしていません）"
     )
+    return 0
+
+
+def command_unlock(args: argparse.Namespace) -> int:
+    if not args.yes:
+        raise UpdateError("失敗原因を確認してから unlock --yes を指定してください。")
+    with apply_attempt(PAGE_TITLE, unlock=True):
+        pass
+    print(f"{PAGE_TITLE} の失敗ロックを解除しました。")
     return 0
 
 
@@ -938,6 +817,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     auth = subparsers.add_parser("auth-check", help="Bot Passwordで認証と読み取りだけを確認する")
     auth.set_defaults(handler=command_auth_check)
+    unlock = subparsers.add_parser("unlock", help="失敗原因を確認した後で連続失敗ロックを解除")
+    unlock.add_argument("--yes", action="store_true")
+    unlock.set_defaults(handler=command_unlock)
     return parser
 
 

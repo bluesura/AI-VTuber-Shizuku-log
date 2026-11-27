@@ -18,7 +18,7 @@ GitHubには、収録したログと、その出所や検証過程を後から�
 logs/
   youtube/<年>/<日付_タイトル>/   動画情報・字幕・チャット・コメント
   twitter(x)/<ハンドル>/        Xの収集ログ（年・月別TSV）
-persona/                        人格・特性・エピソード等の分析資料
+tools/persona/                        人格・特性・エピソード等の分析資料
 tools/                         下記の収集・分析・編集ツール
 outputs/                        中間データ・調査案・実行結果（Git管理外）
 AGENTS.md                       エージェント向けの実行規約
@@ -63,7 +63,7 @@ Readme.md                       利用者向けの入口（本書）
 | YouTubeコメント用の目次を作る | [タイムスタンプ作成スキル](tools/skills/youtube_timestamp_comment_skill/README.md)。既存目次の充実度を確認→不足時にコメント再取得→必要な案を生成→ユーザーが手動投稿→公開コメントを再収録。YouTubeとWikiの一覧照合は別作業 |
 | Wiki記事を調査・提案・公開する | 下記「Fandom Wikiの編集」 |
 | 半自動パイプラインでWiki候補を作る | [パイプラインのマニュアル](tools/shizuku-pipeline/MANUAL.md) |
-| ペルソナを更新する | [分析プロンプト](persona/99_prompts/analysis_prompt.md) |
+| ペルソナを更新する | [分析プロンプト](tools/persona/99_prompts/analysis_prompt.md) |
 
 ### ログの更新
 

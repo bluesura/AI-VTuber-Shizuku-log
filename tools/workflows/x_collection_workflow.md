@@ -289,6 +289,14 @@ javascript:(()=>{if(window.__shizukuCollectorCleanup)window.__shizukuCollectorCl
 
 ## Step 3: 差分抽出と FxTwitter による 20 列データ生成（AI / スクリプト実行）
 
+回収したID一覧を次のCLIに渡すと、取得・匿名化した追加候補を表示する。保存時は `--dry-run` を `--execute` に置き換える。返信と判明している場合は、IDにタブと `REPLY` を添えると親情報の補完を試みる。
+
+```powershell
+python tools/scripts/collect_x_logs.py Shizuku_AItuber --ids <ID一覧.txt> --dry-run
+```
+
+通常の発見元はStep 2のID一覧。補助タイムラインを試す場合は `--discover --stop-id <既知ID>` を指定する。補助タイムラインでは返信が取りこぼされることがある。過去の空白期間を補完するときは `--allow-gap` で境界の未到達を許す。HTTPエラー・カーソル循環では停止する。進捗はTSV確定後に `outputs/shizuku-x-collection/` へ保存する。
+
 保存した `shizuku_post_ids_YYYY-MM-DD.txt` をリポジトリ作業フォルダ（例: `outputs/x_intake/`）に置き、以下の処理を実行します。
 
 ### 3.1 既存ログとの重複排除
@@ -313,9 +321,9 @@ javascript:(()=>{if(window.__shizukuCollectorCleanup)window.__shizukuCollectorCl
 
   * 展開済み URL は `extracted_urls`、添付画像・動画 URL は `media_urls` に格納する。
 
-* **引用（`QUOTE`）**:
+* **引用（`QUOTE_RETWEET` または引用を伴う `REPLY`）**:
 
-  * `quote_post_id`, `quote_author`, `quote_text` を格納する。一般ユーザーの引用元は既存ルールに従い匿名化または最小保持とする。
+  * `quote_post_id`, `quote_author`, `quote_text` を格納する。一般ユーザーの場合は匿名化した著者を保持し、引用元本文と投稿IDは空欄にする。
 
 * **返信先（`REPLY`）の補完と匿名化**:
 
@@ -346,7 +354,7 @@ javascript:(()=>{if(window.__shizukuCollectorCleanup)window.__shizukuCollectorCl
 | 1 | `post_id` | 投稿 ID（数値文字列） |
 | 2 | `date_utc` | UTC 投稿日時（ISO 8601） |
 | 3 | `author` | 投稿者ハンドル（`Shizuku_AItuber` / `cumulo_autumn` / `ShizukuResearch`） |
-| 4 | `type` | `POST` / `REPLY` / `QUOTE` / `REPLY_QUOTE` 等 |
+| 4 | `type` | `CONTEXT_TWEET` / `REPLY` / `QUOTE_RETWEET`。旧 `POST` / `QUOTE` / `REPLY_QUOTE` はS1で変換 |
 | 5 | `text` | 本文（絵文字保持・タブ/改行正規化済み） |
 | 6 | `extracted_urls` | `facets` 等から復元した展開済み URL |
 | 7 | `quote_post_id` | 引用元投稿 ID |
@@ -361,7 +369,7 @@ javascript:(()=>{if(window.__shizukuCollectorCleanup)window.__shizukuCollectorCl
 | 16 | `views` | 表示回数 |
 | 17 | `snapshot_date` | ログ取得日（`YYYY-MM-DD`） |
 | 18 | `metrics_date` | 反応数取得日（`YYYY-MM-DD`） |
-| 19 | `source_method` | 取得経路（新規収集は `fxtwitter`） |
+| 19 | `source_method` | 取得経路（新規収集は `fx_status` または `fx_thread`） |
 | 20 | `quality_flags` | `missing_parent` 等の品質フラグ |
 
 ## Step 4: TSV マージ・パイプライン正規化・検証（AI / スクリプト実行）
