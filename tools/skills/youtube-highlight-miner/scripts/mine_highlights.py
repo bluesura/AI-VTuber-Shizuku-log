@@ -2,7 +2,7 @@
 """YouTube配信ログから癖・AI語・名言/迷言・物語候補を採掘する前処理スクリプト。
 
 sbv（優先）または srt、画面OCR（screen-ocr.txt）と live_chat（通常/OCR）を突き合わせ、
-1) 通読用 (condensed.txt) と秒確定用 (timeline.txt) を生成
+1) 通読・時刻照合用 timeline.txt とOCR根拠索引を生成
 2) info.txt から動画ID・URLを自動取得し、タイムスタンプ付きURL生成を支援
 3) AI語・空耳反応を 🟢高確度(3件以上) / 🟡候補(1-2件) で抽出し、直前の外国語フリ有無も確認
 4) 連続盛り上がり区間（物語・一連の流れ候補）を自動抽出
@@ -10,10 +10,14 @@ sbv（優先）または srt、画面OCR（screen-ocr.txt）と live_chat（通�
 from __future__ import annotations
 
 import argparse
-import glob
+import json
+import tempfile
+from collections import Counter
 import re
 import sys
 from pathlib import Path
+
+from ocr_observations import group_observations, milliseconds, read_observations, verified_manifests
 
 REACT_WORDS = [
     "草", "ｗ", "笑", "泣", "エモ", "すご", "ヤバ", "やば", "マジ", "まじ", "神",
@@ -31,7 +35,6 @@ NOISE_WORDS = [
 
 SBV_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:\.\d+)?),(\d+(?::\d{2})+(?:\.\d+)?)")
 SRT_TS_RE = re.compile(r"(\d+(?::\d{2})+(?:[.,]\d+)?)\s*-->\s*(\d+(?::\d{2})+(?:[.,]\d+)?)")
-SCREEN_OCR_RE = re.compile(r"^\[(\d+(?::\d{2})+(?:\.\d+)?)\]\s*(.*)$")
 CHAT_RE = re.compile(r"\s*\[(-?\d+(?::\d{2})+)\]\s*@?\s*(.+?)\s*[:：]\s*(.*)")
 
 
@@ -51,11 +54,13 @@ def fmt(sec: int) -> str:
 
 
 def find_files(base_dir: Path, pattern: str, video_id: str | None) -> list[Path]:
-    paths = sorted(Path(p) for p in glob.glob(str(base_dir / pattern)))
+    paths = sorted(p for p in base_dir.glob(pattern) if p.is_file())
     if video_id:
         matched = [p for p in paths if video_id in p.name]
         if matched:
             return matched
+        # 元のファイル名を失った添付データは引き続き受け付ける。
+        return [p for p in paths if not re.match(r"^[A-Za-z0-9_-]{11}\.", p.name)]
     return paths
 
 
@@ -82,7 +87,7 @@ def parse_sbv(paths: list[Path]) -> list[tuple[int, str]]:
         while i < n:
             m = SBV_TS_RE.fullmatch(lines[i].strip())
             if m:
-                start_sec = to_sec(m.group(1))
+                start_ms = milliseconds(m.group(1))
                 i += 1
                 parts = []
                 while i < n and lines[i].strip() and not SBV_TS_RE.fullmatch(lines[i].strip()):
@@ -90,7 +95,7 @@ def parse_sbv(paths: list[Path]) -> list[tuple[int, str]]:
                     i += 1
                 joined = " ".join(parts).strip()
                 if joined:
-                    entries.append((start_sec, joined))
+                    entries.append((start_ms, joined))
             else:
                 i += 1
     entries.sort(key=lambda x: x[0])
@@ -106,7 +111,7 @@ def parse_srt(paths: list[Path]) -> list[tuple[int, str]]:
         while i < n:
             m = SRT_TS_RE.fullmatch(lines[i].strip())
             if m:
-                start_sec = to_sec(m.group(1))
+                start_ms = milliseconds(m.group(1))
                 i += 1
                 parts = []
                 while i < n and lines[i].strip() and not SRT_TS_RE.fullmatch(lines[i].strip()):
@@ -114,35 +119,7 @@ def parse_srt(paths: list[Path]) -> list[tuple[int, str]]:
                     i += 1
                 joined = " ".join(parts).strip()
                 if joined:
-                    entries.append((start_sec, joined))
-            else:
-                i += 1
-    entries.sort(key=lambda x: x[0])
-    return entries
-
-
-def parse_screen_ocr(paths: list[Path]) -> list[tuple[int, str]]:
-    entries: list[tuple[int, str]] = []
-    for path in paths:
-        with path.open(encoding="utf-8-sig", errors="replace") as f:
-            lines = f.read().replace("\r", "").splitlines()
-        i, n = 0, len(lines)
-        while i < n:
-            line = lines[i].strip()
-            if not line or line.startswith("#"):
-                i += 1
-                continue
-            m = SCREEN_OCR_RE.match(line)
-            if m:
-                start_sec = to_sec(m.group(1))
-                parts = [m.group(2).strip()] if m.group(2).strip() else []
-                i += 1
-                while i < n and lines[i].strip() and not SCREEN_OCR_RE.match(lines[i].strip()):
-                    parts.append(lines[i].strip())
-                    i += 1
-                joined = "".join(parts).strip()
-                if joined:
-                    entries.append((start_sec, joined))
+                    entries.append((start_ms, joined))
             else:
                 i += 1
     entries.sort(key=lambda x: x[0])
@@ -174,20 +151,61 @@ def resolve_input_dir(arg_dir: str | None) -> Path:
     return default_cloud if default_cloud.is_dir() else Path.cwd()
 
 
-def main() -> int:
+def fmt_ms(ms):
+    seconds, fraction = divmod(ms, 1000)
+    return f"{fmt(seconds)}.{fraction:03}" if fraction else fmt(seconds)
+
+
+def write_timeline(path, video_id, base_url, subtitles, sub_format, groups, chat, window):
+    events = [(ms, f"SUB {text}") for ms, text in subtitles]
+    for group in groups:
+        observations = group["observations"]
+        first, last = observations[0]["ms"], observations[-1]["ms"]
+        notes = []
+        if len(observations) > 1:
+            label = "周回" if group["cycle"] else "連続表示"
+            notes.append(f"{label}×{len(observations)} ～{fmt_ms(last)}")
+        if group["replay_candidate"]:
+            notes.append("再表示候補")
+        if group["review"]:
+            notes.append("要確認")
+        suffix = " [" + "／".join(notes) + "]" if notes else ""
+        events.append((first, f"{group['id']} {group['text']}{suffix}"))
+
+    chat_counts = Counter()
+    for seconds, _, text in chat:
+        slot = seconds // window
+        if chat_counts[slot] < 10:
+            events.append((seconds * 1000, f"CHAT {text}"))
+            chat_counts[slot] += 1
+
+    with path.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(f"# 動画ID: {video_id or '不明'}\n# URL: {base_url or '不明'}\n"
+                     f"# SUB={sub_format or 'なし'} / O番号=画面OCR（表示時刻） / CHAT=文脈用\n"
+                     "# O番号の元ファイル・行・確認フレームは ocr-evidence.json。再表示回数は発話回数ではない。\n")
+        for ms, text in sorted(events, key=lambda row: row[0]):
+            stream.write(f"[{fmt_ms(ms)}] {text}\n")
+
+
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input_dir", nargs="?", help="入力ディレクトリ")
     parser.add_argument("--video-id", help="動画ID（混在防止）")
-    parser.add_argument("--out-dir", default="/tmp", help="出力先（既定: /tmp）")
-    args = parser.parse_args()
+    parser.add_argument("--out-dir", type=Path, help="派生出力先（既定: 新規の一時フォルダ）")
+    evidence = parser.add_mutually_exclusive_group()
+    evidence.add_argument("--frames", action="append", type=Path, help="照合用frames.jsonlを動画時刻順に複数指定可")
+    evidence.add_argument("--no-frames", action="store_true", help="フレームを使わず、再表示候補を保持する")
+    args = parser.parse_args(argv)
 
     base_dir = resolve_input_dir(args.input_dir)
-    out_dir = Path(args.out_dir).expanduser().resolve()
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     info_paths = find_files(base_dir, "*info*.txt", args.video_id)
     vid_info, url_info, title_info = parse_info(info_paths)
     video_id = args.video_id or vid_info
+    if video_id and not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        parser.error("動画IDは11文字のYouTube IDを指定してください。")
+    if args.video_id and vid_info and args.video_id != vid_info:
+        parser.error("指定した動画IDと動画情報が一致しません。")
     base_url = url_info or (f"https://www.youtube.com/watch?v={video_id}" if video_id else None)
 
     sbv_paths = find_files(base_dir, "*sbv*.txt", video_id)
@@ -200,14 +218,29 @@ def main() -> int:
             sub_format = "SRT (フォールバック)"
 
     screen_ocr_paths = find_files(base_dir, "*screen-ocr*.txt", video_id)
-    screen_ocr = parse_screen_ocr(screen_ocr_paths) if screen_ocr_paths else []
+    observations = read_observations(screen_ocr_paths)
+    manifests = args.frames or []
+    if not manifests and not args.no_frames and video_id and len(screen_ocr_paths) == 1:
+        repo = Path(__file__).resolve().parents[4]
+        try:
+            manifests = verified_manifests(repo / "outputs/shizuku-screen-ocr" / video_id,
+                                           video_id, screen_ocr_paths[0])
+        except (OSError, ValueError, KeyError) as exc:
+            print(f"画面OCRの完了記録を利用できません: {exc}", file=sys.stderr)
+    try:
+        groups = group_observations(observations, manifests)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        if args.frames:
+            parser.error(str(exc))
+        print(f"画面OCRのフレームを照合できません。本文は保持します: {exc}", file=sys.stderr)
+        manifests = []
+        groups = group_observations(observations)
 
-    if not subs and not screen_ocr:
+    if not subs and not groups:
         print(f"ERROR: 字幕（sbv/srt/screen-ocr）が見つかりません: {base_dir}", file=sys.stderr)
         return 1
-    if not subs and screen_ocr:
-        subs = screen_ocr
-        sub_format = "Screen-OCR"
+    if not subs:
+        sub_format = None
 
     cand = sorted(set(find_files(base_dir, "*live_chat*.txt", video_id)) | set(find_files(base_dir, "*chat*ocr*.txt", video_id)))
     ocr_paths = [p for p in cand if "ocr" in p.name.lower()]
@@ -227,43 +260,29 @@ def main() -> int:
             ded.append((t, u, c))
         chat = ded
 
-    pad_b, pad_a, bucket, win = (20, 60, 60, 30) if ocr_mode else (15, 30, 30, 20)
-
+    bucket, window = (60, 30) if ocr_mode else (30, 20)
+    if args.out_dir:
+        out_dir = args.out_dir.expanduser().resolve()
+        if out_dir.is_relative_to(base_dir):
+            parser.error("出力先は入力ディレクトリの外に指定してください。")
+        out_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        out_dir = Path(tempfile.mkdtemp(prefix="shizuku-highlights-"))
     timeline_path = out_dir / "timeline.txt"
-    with timeline_path.open("w", encoding="utf-8") as f:
-        for t, text in subs:
-            near_ocr = [otext for ot, otext in screen_ocr if t - 10 <= ot <= t + 10]
-            near = [c for ct, _, c in chat if t - pad_b <= ct <= t + pad_a]
-            f.write(f"[{fmt(t)}] SUB: {text}\n")
-            for otext in near_ocr[:2]:
-                f.write(f"          OCR: {otext}\n")
-            for c in near[:6]:
-                f.write(f"          chat: {c}\n")
+    evidence_path = out_dir / "ocr-evidence.json"
+    write_timeline(timeline_path, video_id, base_url, subs, sub_format, groups, chat, window)
+    with evidence_path.open("w", encoding="utf-8", newline="\n") as stream:
+        json.dump({"video_id": video_id, "items": {
+            group["id"]: {k: v for k, v in group.items() if k not in {"id", "text"}}
+            for group in groups
+        }}, stream, ensure_ascii=False, separators=(",", ":"))
+        stream.write("\n")
 
-    condensed_path = out_dir / "condensed.txt"
-    min_t = min([subs[0][0]] + [ct for ct, _, _ in chat]) if chat else subs[0][0]
-    t_start = (min_t // win) * win if min_t < 0 else 0
-    t_end = subs[-1][0] + win
-    with condensed_path.open("w", encoding="utf-8") as f:
-        t = t_start
-        while t < t_end:
-            txt = "".join(x for s, x in subs if t <= s < t + win)
-            ocrs = [otext for ot, otext in screen_ocr if t <= ot < t + win]
-            cs = [c for ct, _, c in chat if t <= ct < t + win]
-            if txt.strip() or ocrs or cs:
-                f.write(f"[{fmt(t)}] {txt}\n")
-                for otext in ocrs:
-                    f.write(f"   [OCR] {otext}\n")
-                if cs:
-                    f.write("   >> " + " / ".join(cs[:10]) + "\n")
-            t += win
-
-    print("== 採掘準備完了 ==")
-    print(f"  タイトル: {title_info or '(不明)'}")
-    print(f"  ベースURL: {base_url or '(不明)'}")
-    ocr_info = f" / screen-ocr: {len(screen_ocr)}件" if screen_ocr else ""
-    print(f"  字幕: {sub_format} {len(subs)}件 (最終 {fmt(subs[-1][0])}){ocr_info} / chat: {len(chat)}件" + (" [OCRモード]" if ocr_mode else ""))
-    print(f"  出力: {condensed_path} / {timeline_path}")
+    print(f"タイトル: {title_info or '不明'} / 動画ID: {video_id or '不明'}")
+    print(f"音声字幕 {len(subs)}件 / 画面OCR {len(observations)}観測から{len(groups)}行を構成 / フレーム記録 {len(manifests)}区間")
+    print(f"通読・照合: {timeline_path} / OCR根拠: {evidence_path}")
+    subs = ([(ms // 1000, text) for ms, text in subs] if subs else
+            [(group["observations"][0]["ms"] // 1000, group["text"]) for group in groups])
 
     # 1) AI語・空耳反応バケット（🟢高確度 >=3件 / 🟡候補 1-2件）
     slip_buckets: dict[int, set[str]] = {}
@@ -282,8 +301,7 @@ def main() -> int:
             sample = prev[0][1][:40] if prev else "(字幕該当なし)"
             foreign_pre = [c for ct, _, c in chat if ts - 45 <= ct <= ts + 15 and FOREIGN_HINT_RE.search(c)]
             note = " [※直前に他言語・質問あり]" if foreign_pre else ""
-            link = f"{base_url}&t={ts}s" if base_url else fmt(ts)
-            print(f"  {tier} [{fmt(ts)}] users={cnt} | {sample}{note} | {link}")
+            print(f"  {tier} [{fmt(ts)}] users={cnt} | {sample}{note}")
 
     # 2) 盛り上がり連続区間（物語・一連の流れ候補）
     hot_buckets: dict[int, list[int]] = {}
@@ -301,8 +319,7 @@ def main() -> int:
         ts = b * bucket
         prev = [s for s in subs if s[0] <= ts + bucket]
         line = prev[-1][1][:40] if prev else "(字幕該当なし)"
-        link = f"{base_url}&t={ts}s" if base_url else fmt(ts)
-        print(f"  [{fmt(ts)}] chat={n} react={r} | {line} | {link}")
+        print(f"  [{fmt(ts)}] chat={n} react={r} | {line}")
 
     return 0
 

@@ -1,0 +1,7 @@
+{
+  "video_id": "gCmedFG8Abw",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 44000, "end_ms": 7062000, "crop": [32, 553, 848, 132], "mode": "replace", "dark_on_light": true}
+  ]
+}
