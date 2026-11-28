@@ -1,0 +1,7 @@
+{
+  "video_id": "lbSmNAVHXAU",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 89000, "end_ms": 7043000, "crop": [28, 555, 851, 140], "mode": "replace", "dark_on_light": true}
+  ]
+}

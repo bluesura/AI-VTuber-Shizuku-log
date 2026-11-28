@@ -1,0 +1,10 @@
+{
+  "video_id": "stRz7_yYUho",
+  "size": [1280, 720],
+  "regions": [
+    {"start_ms": 70250, "end_ms": 497000, "crop": [28, 555, 851, 140], "mode": "replace", "dark_on_light": true},
+    {"start_ms": 586750, "end_ms": 823750, "crop": [28, 555, 851, 140], "mode": "replace", "dark_on_light": true},
+    {"start_ms": 919250, "end_ms": 1020250, "crop": [28, 555, 851, 140], "mode": "replace", "dark_on_light": true},
+    {"start_ms": 1112500, "end_ms": 3066250, "crop": [28, 555, 851, 140], "mode": "replace", "dark_on_light": true}
+  ]
+}
